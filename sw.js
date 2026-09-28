@@ -1,6 +1,6 @@
 // Guarda o app no celular para abrir sem internet.
 // Ao publicar uma versão nova, troque o número abaixo (v1 -> v2).
-const CACHE = 'caderno-custos-v5';
+const CACHE = 'caderno-custos-v6';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

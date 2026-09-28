@@ -242,9 +242,14 @@ dialog::backdrop{background:rgba(24,10,36,.6)}
   dialog.full .dlg-body{flex:1}
 }
 
-#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:20;max-width:90%;text-align:center}
-#toast.show{opacity:1;transform:translate(-50%,0)}
-@media (prefers-reduced-motion: reduce){#toast,nav.tabs .ic{transition:none}}
+#toast{position:fixed;inset:auto;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);margin:0;border:0;background:var(--ink);color:var(--bg);padding:13px 18px;border-radius:16px;font-weight:800;font-size:1rem;max-width:min(92%,420px);width:max-content;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:50;pointer-events:none}
+#toast:not(:popover-open){display:none}
+#toast:popover-open{animation:toastIn .2s ease-out}
+#toast.ok{background:#0E9F4F;color:#fff}
+#toast.erro{background:#D6352B;color:#fff}
+#toast svg{width:22px;height:22px;flex:none}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion: reduce){#toast:popover-open{animation:none}nav.tabs .ic{transition:none}}
 
 @media print{
   header.top,nav.tabs,.no-print,.banner{display:none!important}
@@ -266,7 +271,7 @@ dialog::backdrop{background:rgba(24,10,36,.6)}
 <nav class="tabs" id="tabs"></nav>
 <dialog id="dlg"></dialog>
 <dialog id="cfm"></dialog>
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="toast" popover="manual" role="status" aria-live="polite"></div>
 
 <script>
 /* ============ Utilidades ============ */
@@ -313,7 +318,18 @@ function fmtBase(q, f){
 }
 const CATEGORIAS = ['Salgados','Churrasco','Acompanhamentos','Bolos e doces','Outros'];
 
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+function toast(msg, tipo){
+  if (tipo === undefined) tipo = /salv|enviad|restaurad|exclu|compartilhad|baixad|carregad|arredondad|apagad/i.test(msg) ? 'ok'
+    : /^(Informe|Dê|Adicione|Escolha|Não|Esse arquivo)/.test(msg) ? 'erro' : '';
+  const t = $('#toast'); t.className = tipo;
+  const icone = tipo === 'ok' ? ic('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 3) : tipo === 'erro' ? ic('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.3"/>', 2.4) : '';
+  t.innerHTML = icone + `<span>${esc(msg)}</span>`;
+  if (t.showPopover){ try { if (t.matches(':popover-open')) t.hidePopover(); t.showPopover(); } catch(e){} } else t.style.display = 'flex';
+  if (tipo === 'ok') try { navigator.vibrate && navigator.vibrate(30); } catch(e){}
+  clearTimeout(toast.t); toast.t = setTimeout(() => { try { if (t.hidePopover) t.hidePopover(); else t.style.display = 'none'; } catch(e){} }, 2600);
+}
+const moneyStr = n => n ? n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
+function normMoney(root){ root.querySelectorAll('.prefix input').forEach(i => { i.inputMode = 'numeric'; i.autocomplete = 'off'; if (i.value) i.value = moneyStr(num(i.value)); }); }
 const scripts = {};
 function loadScript(src){ return scripts[src] ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { delete scripts[src]; rej(new Error('Sem conexão para carregar ' + src.split('/').pop())); }; document.head.appendChild(s); }); }
 
@@ -457,7 +473,7 @@ function render(){
   if (a && ($('#main').contains(a) || $('#dlg').contains(a)) && /INPUT|TEXTAREA/.test(a.tagName)){ pendente = true; return; }
   pendente = false;
   $('#tabs').innerHTML = TABS.map(([id, nome, p]) => `<button data-act="tab" data-id="${id}" class="${id === 'lan' ? 'fab' : ''}" ${TAB === id ? 'aria-current="page"' : ''}><span class="ic">${ic(p, id === 'lan' ? 2.6 : 2)}</span><span>${nome}</span></button>`).join('');
-  $('#main').innerHTML = banner() + VIEWS[TAB]();
+  $('#main').innerHTML = banner() + VIEWS[TAB](); normMoney($('#main'));
   if ($('#dlg').open && $('#dlg').dataset.kind === 'ajustes') openAjustes();
 }
 document.addEventListener('focusout', () => setTimeout(() => { if (pendente) render(); }, 60));
@@ -636,7 +652,7 @@ function lanResult(){
 
 /* ============ Diálogos ============ */
 const dlg = () => $('#dlg');
-function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; if (!d.open) d.showModal(); }
+function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; normMoney(d); if (!d.open) d.showModal(); }
 function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = null; }
 dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
 function askConfirm(msg, ok = 'Confirmar'){
@@ -1071,6 +1087,11 @@ function bind(t){
 }
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.tagName === 'INPUT' && t.closest('.prefix')){
+    if (e.inputType === 'insertFromPaste') t.value = moneyStr(num(t.value));
+    else { const d = t.value.replace(/\D/g, '').replace(/^0+/, ''); t.value = d ? moneyStr(parseInt(d, 10) / 100) : ''; }
+    try { t.setSelectionRange(t.value.length, t.value.length); } catch(err){}
+  }
   if (t.type === 'tel'){
     const apagando = e.inputType && e.inputType.startsWith('delete');
     const antes = t.value.slice(0, t.selectionStart).replace(/\D/g, '').length;
@@ -1098,6 +1119,7 @@ document.addEventListener('change', e => {
   const salvo = await Local.get('state');
   if (salvo && typeof salvo === 'object') S = {insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, meta:{}, ...salvo};
   COLS.forEach(c => S[c] ||= {});
+  if (!HTMLElement.prototype.showPopover) $('#toast').style.display = 'none';
   render();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
