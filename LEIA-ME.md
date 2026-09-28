@@ -87,8 +87,20 @@ Na aba **Relatório**, escolha o mês e toque em **Gerar PDF do relatório**. O 
 - **Custo do insumo** = preço da embalagem ÷ tamanho da embalagem (em g, ml ou unidade).
 - **Custo da receita** = soma dos ingredientes. **Custo de cada um** = custo da receita ÷ rendimento.
 - **Preço sugerido no orçamento** = custo total ÷ (1 − margem). Com 20%, um custo de R$ 80 vira R$ 100, e o lucro de R$ 20 é 20% do valor cobrado.
-- **Lucro do lançamento** = valor que entrou − (custo das receitas + custos extras). O percentual é sobre o que entrou.
-- O custo de cada lançamento fica **congelado no dia**, então mudar o preço de um insumo depois não altera o lucro das semanas anteriores.
+- **Lucro da venda** = valor da venda − (custo das receitas + custos extras). O percentual é sobre o valor da venda.
+- O custo de cada venda fica **congelado no dia do lançamento**, então mudar o preço de um insumo depois não altera o lucro das semanas anteriores.
+
+## Formas de pagamento e relatório
+
+Ao lançar uma venda, escolha como ela é paga:
+
+- **No pedido:** o valor todo conta na data em que o dinheiro entrou (hoje, por padrão).
+- **Na entrega:** o valor conta na data do evento. Se o evento ainda não aconteceu, fica em **A receber**.
+- **Entrada + restante na entrega:** a entrada conta na data em que foi paga, e o restante fica em **A receber** até a data do evento.
+
+O relatório segue o **regime de caixa**: cada valor aparece no mês em que o dinheiro entrou. O custo da venda é contado na mesma proporção. Se entrou metade do valor em setembro, metade do custo também conta em setembro.
+
+Os valores pendentes aparecem na tela Início e no relatório do mês previsto. Quando o dinheiro chegar, toque em **Recebi** e ele passa a contar no mês de hoje. Se tocar por engano, abra a venda e use **Desfazer**.
 
 ## Publicar uma versão nova
 

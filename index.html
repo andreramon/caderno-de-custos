@@ -316,7 +316,14 @@ function fmtBase(q, f){
   if (f === 'ml') return q >= 1000 ? fq(q/1000) + ' L' : fq(q) + ' ml';
   return fq(q) + ' un';
 }
-const CATEGORIAS = ['Salgados','Churrasco','Acompanhamentos','Bolos e doces','Outros'];
+const CAT_PADRAO = ['Salgados','Churrasco','Acompanhamentos','Bolos e doces','Outros'];
+function categorias(){
+  const c = S.config && S.config.categorias;
+  const l = c && Array.isArray(c.lista) && c.lista.length ? [...c.lista] : [...CAT_PADRAO];
+  Object.values(S.receitas || {}).forEach(r => { if (r.categoria && !l.includes(r.categoria)) l.push(r.categoria); });
+  return l;
+}
+const acharCat = nome => categorias().find(c => c.toLowerCase() === nome.trim().toLowerCase());
 
 function toast(msg, tipo){
   if (tipo === undefined) tipo = /salv|enviad|restaurad|exclu|compartilhad|baixad|carregad|arredondad|apagad/i.test(msg) ? 'ok'
@@ -424,11 +431,28 @@ function calcLinhas(linhas){
   });
   return {custo, detalhes, compras};
 }
+const custoTotal = l => num(l.custoItens) + num(l.extras);
+function pagamentosDe(l){ return Array.isArray(l.pagamentos) && l.pagamentos.length ? l.pagamentos : [{id:'p0', tipo:'total', data:l.data, valor:num(l.faturamento), recebido:true}]; }
+const tipoPag = {total:'Pagamento', entrada:'Entrada', restante:'Restante'};
+// Cada valor conta no mês em que o dinheiro entrou; o custo acompanha na mesma proporção.
 function resumoMes(ym){
-  const lista = Object.values(S.lancamentos).filter(l => (l.data || '').startsWith(ym)).sort((a,b) => a.data.localeCompare(b.data));
-  let fat = 0, custo = 0; lista.forEach(l => { fat += num(l.faturamento); custo += num(l.custoItens) + num(l.extras); });
-  return {lista, fat, custo, lucro: fat - custo, mg: fat ? (fat - custo) / fat : 0};
+  const g = {}, pend = [];
+  Object.values(S.lancamentos).forEach(l => { const tot = num(l.faturamento), ct = custoTotal(l);
+    pagamentosDe(l).forEach(p => {
+      if (!(p.data || '').startsWith(ym)) return;
+      if (!p.recebido){ pend.push({l, p}); return; }
+      const x = g[l.id] ||= {l, entrou:0, custo:0, datas:[]};
+      x.entrou += num(p.valor); x.custo += tot ? ct * num(p.valor) / tot : ct; if (!x.datas.includes(p.data)) x.datas.push(p.data);
+    });
+  });
+  const lista = Object.values(g).map(x => ({...x, datas:x.datas.sort(), parcial:x.entrou < num(x.l.faturamento) - .005, lucro:x.entrou - x.custo})).sort((a,b) => a.datas[0].localeCompare(b.datas[0]));
+  let fat = 0, custo = 0; lista.forEach(x => { fat += x.entrou; custo += x.custo; });
+  pend.sort((a,b) => a.p.data.localeCompare(b.p.data));
+  return {lista, fat, custo, lucro:fat - custo, mg:fat ? (fat - custo) / fat : 0, pend};
 }
+function aReceber(){ const out = []; Object.values(S.lancamentos).forEach(l => pagamentosDe(l).forEach(p => { if (!p.recebido) out.push({l, p}); })); return out.sort((a,b) => (a.p.data || '').localeCompare(b.p.data || '')); }
+const pendItem = ({l, p}) => `<div class="item" style="cursor:default"><span><b>${esc(l.descricao)}</b><small>${tipoPag[p.tipo] || 'Pagamento'} previsto para ${dataBR(p.data)}</small>${p.data < hoje() ? '<span class="warn">Data já passou</span>' : ''}</span><span class="val" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">${brl(num(p.valor))}<button class="btn small manga" data-act="receber" data-l="${l.id}" data-p="${p.id}">Recebi</button></span></div>`;
+const relItem = x => `<button class="item" data-act="verLan" data-id="${x.l.id}"><span><b>${esc(x.l.descricao)}</b><small>Entrou em ${x.datas.map(dataCurta).join(' e ')}${x.parcial ? `, parte de ${brl(num(x.l.faturamento))}` : ''}. Evento ${dataCurta(x.l.data)}.</small></span><span class="val ${x.lucro < 0 ? 'negt' : 'pos'}">${brl(x.lucro)}<small>entrou ${brl(x.entrou)}</small></span></button>`;
 const temaAtual = () => { try { return localStorage.getItem('cc:tema') || 'dark'; } catch(e){ return 'dark'; } };
 function aplicarTema(t){
   try { localStorage.setItem('cc:tema', t); } catch(e){}
@@ -441,11 +465,11 @@ const margemOrc = () => Math.min(Math.max(num(ORC.margem) / 100, 0), .95);
 /* ============ Estado dos formulários ============ */
 let TAB = 'ini', CAD = 'rec';
 let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20' };
-const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'' });
+const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje() });
 let LAN = novoLan();
 let REL = hoje().slice(0, 7);
-let RF = null, INS = null, Q = null, NEG = null, BUSCA = '';
-const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG };
+let RF = null, INS = null, Q = null, NEG = null, CATS = null, BUSCA = '';
+const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS };
 
 /* ============ Ícones ============ */
 const ic = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -520,7 +544,7 @@ const VIEWS = {
     const orcs = orcsOrdenados().slice(0, 4);
     return `<h2>${neg.nome ? 'Olá, ' + esc(neg.nome) : 'Olá!'}</h2><p class="intro">O que vamos fazer hoje?</p>
     ${temIns && temRec ? `<div class="hero"><span>Seu lucro em ${mesNome(hoje().slice(0, 7)).split(' ')[0].toLowerCase()}</span><strong>${brl(r.lucro)}</strong>
-      <div class="mini"><span>Entrou<b>${brl(r.fat)}</b></span><span>Margem<b>${pct(r.mg)}</b></span><span>Eventos<b>${r.lista.length}</b></span></div></div>` : `
+      <div class="mini"><span>Entrou<b>${brl(r.fat)}</b></span><span>Margem<b>${pct(r.mg)}</b></span><span>Vendas<b>${r.lista.length}</b></span></div></div>` : `
     <div class="panel"><h3>Primeiros passos</h3><ol class="passos">
       <li class="${temIns ? 'ok' : ''}"><b>${temIns ? '✓' : '1'}</b><span>Cadastre o que você compra</span>${temIns ? '' : '<button class="btn small primary" data-act="novoInsumo">Fazer</button>'}</li>
       <li class="${temRec ? 'ok' : ''}"><b>${temRec ? '✓' : '2'}</b><span>Monte as receitas</span>${!temIns || temRec ? '' : '<button class="btn small primary" data-act="novaReceita">Fazer</button>'}</li>
@@ -533,6 +557,8 @@ const VIEWS = {
       <button class="tile t4" data-act="irInsumos"><span class="ti">${ic(I.ins)}</span><b>Atualizar preço de insumo</b></button>
     </div>
     ${!neg.nome ? `<div class="banner" style="margin-top:12px"><span>Coloque o nome do seu negócio para sair nos orçamentos.</span><button data-act="ajustes">Colocar</button></div>` : ''}
+    ${(() => { const ar = aReceber(); if (!ar.length) return ''; const tot = ar.reduce((a, x) => a + num(x.p.valor), 0);
+      return `<p class="group-title">A receber: ${brl(tot)}</p><div class="list">${ar.slice(0, 5).map(pendItem).join('')}</div>`; })()}
     ${orcs.length ? `<p class="group-title">Orçamentos recentes</p><div class="list">${orcs.map(orcItem).join('')}</div>` : ''}`;
   },
   orc(){
@@ -552,43 +578,50 @@ const VIEWS = {
     ${orcs.length ? `<p class="group-title">Orçamentos salvos</p><div class="list">${orcs.map(orcItem).join('')}</div>` : ''}`;
   },
   lan(){
-    const head = `<h2>Lançar venda</h2><p class="intro">Registre o que entrou e veja o lucro na hora. O custo fica gravado com os preços de hoje.</p>`;
+    const head = `<h2>Lançar venda</h2><p class="intro">Registre a venda e como ela foi paga. O custo fica gravado com os preços de hoje.</p>`;
     if (!Object.keys(S.receitas).length) return head + vazioReceitas();
     const ult = Object.values(S.lancamentos).sort((a,b) => b.data.localeCompare(a.data)).slice(0, 5);
     return head + `
     <div class="panel">
-      <div class="row"><label class="field"><span>Data</span><input type="date" data-bind="lan.data" value="${esc(LAN.data)}"></label>
+      <div class="row"><label class="field"><span>Data do evento</span><input type="date" data-bind="lan.data" value="${esc(LAN.data)}"></label>
       <label class="field"><span>Nome</span><input data-bind="lan.descricao" value="${esc(LAN.descricao)}" placeholder="Churrasco de sexta"></label></div>
       <div class="field" style="margin-bottom:8px"><span>O que foi feito</span></div>${linhasHTML('lan', LAN.linhas)}
     </div>
     <div class="panel">
       <div class="row"><label class="field"><span>Custos extras</span><div class="prefix"><input inputmode="decimal" data-bind="lan.extras" value="${esc(LAN.extras)}" placeholder="0,00"></div></label>
       <label class="field"><span>Quais</span><input data-bind="lan.extrasDesc" value="${esc(LAN.extrasDesc)}" placeholder="Gás, ajudante"></label></div>
-      <label class="field" style="margin-bottom:0"><span>Quanto entrou</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+      <label class="field"><span>Valor total da venda</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+      <div class="field"><span>Como vai ser pago</span><div class="chips">${[['pedido','No pedido'],['entrega','Na entrega'],['entrada','Entrada + restante na entrega']].map(([v, l]) => `<button class="chip" data-act="pagto" data-v="${v}" aria-pressed="${LAN.pagamento === v}">${l}</button>`).join('')}</div></div>
+      ${LAN.pagamento === 'pedido' ? `<label class="field"><span>Data em que o dinheiro entrou</span><input type="date" data-bind="lan.dataPag" value="${esc(LAN.dataPag)}"></label>` : ''}
+      ${LAN.pagamento === 'entrada' ? `<div class="row"><label class="field"><span>Valor da entrada</span><div class="prefix"><input inputmode="decimal" data-bind="lan.entrada" value="${esc(LAN.entrada)}" placeholder="0,00"></div></label>
+      <label class="field"><span>Data da entrada</span><input type="date" data-bind="lan.dataEntrada" value="${esc(LAN.dataEntrada)}"></label></div>` : ''}
+      <p class="hint" id="lan-pag-hint" style="margin:0">${pagHint()}</p>
     </div>
     <div id="lan-result">${lanResult()}</div>
-    <button class="btn primary wide" data-act="salvarLan">Salvar lançamento</button>
+    <button class="btn primary wide" data-act="salvarLan">Salvar venda</button>
     ${ult.length ? `<p class="group-title">Últimos lançamentos</p><div class="list">${ult.map(lanItem).join('')}</div>` : ''}`;
   },
   rel(){
-    const {lista, fat, custo, lucro, mg} = resumoMes(REL);
-    const max = Math.max(1, ...lista.map(l => Math.max(num(l.faturamento), num(l.custoItens) + num(l.extras))));
-    return `<h2>Relatório do mês</h2><p class="intro no-print">Tudo o que entrou, o que custou e quanto sobrou.</p>
+    const {lista, fat, custo, lucro, mg, pend} = resumoMes(REL);
+    const max = Math.max(1, ...lista.map(x => Math.max(x.entrou, x.custo)));
+    const totPend = pend.reduce((a, x) => a + num(x.p.valor), 0);
+    return `<h2>Relatório do mês</h2><p class="intro no-print">Cada valor conta no mês em que o dinheiro entrou. O custo acompanha na mesma proporção.</p>
     <div class="mes"><button class="icon-btn no-print" data-act="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${mesNome(REL)}</strong><button class="icon-btn no-print" data-act="mes" data-d="1" aria-label="Próximo mês">›</button></div>
-    ${!lista.length ? `<div class="panel empty"><h3>Nenhum lançamento neste mês</h3><p>Depois de cada evento, lance quanto entrou para ver o lucro aqui.</p><button class="btn primary" data-act="tab" data-id="lan">Lançar venda</button></div>` : `
+    ${!lista.length && !pend.length ? `<div class="panel empty"><h3>Nada neste mês</h3><p>Quando você lançar uma venda, o dinheiro aparece aqui no mês em que entrou.</p><button class="btn primary" data-act="tab" data-id="lan">Lançar venda</button></div>` : `
+    ${lista.length ? `
     <div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>Você ganhou</span><strong>${brl(lucro)}</strong><span>${pct(mg)} do que entrou</span></div>
     <div class="kpis">
       <div class="kpi"><span>Entrou</span><strong>${brl(fat)}</strong></div>
       <div class="kpi"><span>Custos</span><strong>${brl(custo)}</strong></div>
-      <div class="kpi"><span>Eventos</span><strong>${lista.length}</strong></div>
-      <div class="kpi"><span>Lucro médio</span><strong>${brl(lucro / lista.length)}</strong></div>
+      <div class="kpi"><span>Vendas</span><strong>${lista.length}</strong></div>
+      <div class="kpi"><span>A receber no mês</span><strong>${brl(totPend)}</strong></div>
     </div>
-    <div class="panel"><h3>Evento por evento</h3><div class="bars">${lista.map(l => { const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
-      return `<div><div class="bar-meta"><span>${dataCurta(l.data)} ${esc(l.descricao)}</span><span class="${lu < 0 ? 'negt' : 'pos'}"><b>${brl(lu)}</b> ${f ? '(' + pct(lu / f) + ')' : ''}</span></div>
-      <div class="bar"><i class="c" style="width:${Math.min(c, f || c) / max * 100}%"></i><i class="l" style="width:${Math.max(lu, 0) / max * 100}%"></i></div></div>`; }).join('')}</div>
+    <div class="panel"><h3>Venda por venda</h3><div class="bars">${lista.map(x => `<div><div class="bar-meta"><span>${dataCurta(x.datas[0])} ${esc(x.l.descricao)}${x.parcial ? ' (parte)' : ''}</span><span class="${x.lucro < 0 ? 'negt' : 'pos'}"><b>${brl(x.lucro)}</b> ${x.entrou ? '(' + pct(x.lucro / x.entrou) + ')' : ''}</span></div>
+      <div class="bar"><i class="c" style="width:${Math.min(x.custo, x.entrou || x.custo) / max * 100}%"></i><i class="l" style="width:${Math.max(x.lucro, 0) / max * 100}%"></i></div></div>`).join('')}</div>
       <div class="legend"><span><i style="background:var(--acai);opacity:.35"></i>Custo</span><span><i style="background:var(--lucro)"></i>Lucro</span></div></div>
-    <p class="group-title">Lançamentos</p><div class="list">${lista.map(lanItem).join('')}</div>
-    <div class="btns no-print"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>`}`;
+    <p class="group-title">Dinheiro que entrou</p><div class="list">${lista.map(relItem).join('')}</div>` : `<div class="panel"><h3>Nada recebido neste mês ainda</h3><p class="hint">Os valores abaixo estão previstos para este mês.</p></div>`}
+    ${pend.length ? `<p class="group-title">A receber neste mês: ${brl(totPend)}</p><div class="list">${pend.map(pendItem).join('')}</div>` : ''}
+    ${lista.length ? `<div class="btns no-print"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>` : ''}`}`;
   },
   cad(){
     return `<h2>Cadastros</h2><p class="intro">${CAD === 'rec' ? 'Cada receita diz quanto de cada insumo você usa e quanto ela rende.' : 'Quando um preço mudar, atualize aqui e todas as receitas se recalculam.'}</p>
@@ -600,8 +633,8 @@ function recView(){
   const lista = Object.values(S.receitas).sort((a,b) => a.nome.localeCompare(b.nome));
   if (!lista.length) return vazioReceitas();
   const grupos = {}; lista.forEach(r => (grupos[r.categoria || 'Outros'] ||= []).push(r));
-  return `<button class="btn primary wide" data-act="novaReceita">Nova receita</button>
-  ${CATEGORIAS.filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
+  return `<div class="btns" style="margin-top:0"><button class="btn primary" style="flex:2" data-act="novaReceita">Nova receita</button><button class="btn" style="flex:1" data-act="categorias">Categorias</button></div>
+  ${categorias().filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
     return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
     <span class="val">${brl(cr.total)}<small>${brl(cr.unit)} cada</small></span></button>`; }).join('')}</div>`).join('')}`;
 }
@@ -618,8 +651,9 @@ const insLista = lista => lista.length ? lista.map(i => { const u = UNITS[i.unid
   return `<button class="item" data-act="editInsumo" data-id="${i.id}"><span><b>${esc(i.nome)}</b><small>${brl(num(i.preco))} a embalagem de ${fq(num(i.qtd))} ${u.l}${num(i.qtd) > 1 && u.f === 'un' ? 's' : ''}</small></span><span class="val">${ref}</span></button>`; }).join('')
   : '<p class="hint" style="padding:14px 18px">Nenhum insumo com esse nome.</p>';
 function lanItem(l){
-  const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
-  return `<button class="item" data-act="verLan" data-id="${l.id}"><span><b>${esc(l.descricao)}</b><small>${dataCurta(l.data)}: entrou ${brl(f)}</small></span><span class="val ${lu < 0 ? 'negt' : 'pos'}">${brl(lu)}<small>${f ? pct(lu / f) : ''}</small></span></button>`;
+  const c = custoTotal(l), f = num(l.faturamento), lu = f - c;
+  const falta = pagamentosDe(l).filter(p => !p.recebido).reduce((a, p) => a + num(p.valor), 0);
+  return `<button class="item" data-act="verLan" data-id="${l.id}"><span><b>${esc(l.descricao)}</b><small>Evento ${dataCurta(l.data)}: ${brl(f)}</small>${falta ? `<span class="st enviado">Falta receber ${brl(falta)}</span>` : ''}</span><span class="val ${lu < 0 ? 'negt' : 'pos'}">${brl(lu)}<small>${f ? pct(lu / f) : ''}</small></span></button>`;
 }
 
 function orcResult(){
@@ -645,15 +679,26 @@ function lanResult(){
   const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras, fat = num(LAN.recebido);
   if (!fat && !c.detalhes.length) return '';
   const lucro = fat - custo, m = fat ? lucro / fat : 0;
-  return `<div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>${lucro < 0 ? 'Prejuízo' : 'Seu lucro'}</span><strong>${brl(lucro)}</strong><span>${fat ? pct(m) + ' do que entrou' : 'Informe quanto entrou'}</span></div>
+  return `<div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>${lucro < 0 ? 'Prejuízo' : 'Seu lucro'}</span><strong>${brl(lucro)}</strong><span>${fat ? pct(m) + ' do valor da venda' : 'Informe o valor da venda'}</span></div>
   <div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
-  <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div><div><dt>Entrou</dt><dd>${brl(fat)}</dd></div></dl></div>`;
+  <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div><div><dt>Valor da venda</dt><dd>${brl(fat)}</dd></div></dl></div>`;
+}
+function pagHint(){
+  const h = hoje(), tot = num(LAN.recebido), mes = d => mesNome((d || h).slice(0, 7)).split(' ')[0].toLowerCase();
+  const resto = (v, d) => d > h ? `${brl(v)} fica em "A receber" até você tocar em Recebi (previsto para ${dataBR(d)}).` : `${brl(v)} conta como recebido em ${dataBR(d)}, porque o evento já foi.`;
+  if (LAN.pagamento === 'entrega') return tot ? 'Na entrega: ' + resto(tot, LAN.data) : 'O valor entra no relatório quando você receber.';
+  if (LAN.pagamento === 'entrada'){ const e = num(LAN.entrada);
+    if (!tot) return 'Informe o valor total da venda.';
+    if (!e) return 'Informe quanto foi pago de entrada.';
+    if (e >= tot) return '<span class="warn">A entrada precisa ser menor que o valor total.</span>';
+    return `A entrada de ${brl(e)} conta no relatório de ${mes(LAN.dataEntrada)}. O restante de ` + resto(tot - e, LAN.data); }
+  return tot ? `Os ${brl(tot)} contam no relatório de ${mes(LAN.dataPag)}.` : '';
 }
 
 /* ============ Diálogos ============ */
 const dlg = () => $('#dlg');
 function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; normMoney(d); if (!d.open) d.showModal(); }
-function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = null; }
+function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = null; }
 dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
 function askConfirm(msg, ok = 'Confirmar'){
   return new Promise(res => { const c = $('#cfm');
@@ -689,7 +734,8 @@ function renderRf(){
   openDlg('rf', `<div class="dlg">${dlgHead(RF.id ? 'Editar receita' : 'Nova receita')}
   <div class="dlg-body">
     <label class="field"><span>Nome</span><input data-bind="rf.nome" value="${esc(RF.nome)}" placeholder="Coxinha de frango"></label>
-    <label class="field"><span>Categoria</span><select data-bind="rf.categoria">${CATEGORIAS.map(c => `<option ${RF.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    <label class="field"><span>Categoria</span><select data-bind="rf.categoria" data-rerender="rf">${categorias().map(c => `<option value="${esc(c)}" ${RF.categoria === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__nova" ${RF.categoria === '__nova' ? 'selected' : ''}>+ Nova categoria…</option></select></label>
+    ${RF.categoria === '__nova' ? `<label class="field"><span>Nome da nova categoria</span><input data-bind="rf.novaCat" value="${esc(RF.novaCat || '')}" placeholder="Doces finos, Tortas, Kits festa…"></label>` : ''}
     <div class="row"><label class="field"><span>Rende</span><input inputmode="decimal" data-bind="rf.rendimento" value="${esc(RF.rendimento)}" placeholder="100"></label>
     <label class="field"><span>Em</span><input data-bind="rf.rendUnid" value="${esc(RF.rendUnid)}" placeholder="salgados, pessoas"></label></div>
     <div class="field" style="margin-bottom:8px"><span>Ingredientes desta receita</span></div>
@@ -703,6 +749,20 @@ function renderRf(){
     <div class="panel" style="margin:14px 0 4px;background:var(--bg)"><dl class="resumo" id="rf-total">${rfTotal()}</dl></div>
   </div>
   <div class="dlg-foot">${RF.id ? '<button class="btn danger" data-act="delReceita">Excluir</button>' : ''}<button class="btn primary" data-act="salvarReceita">Salvar</button></div></div>`);
+}
+function salvarListaCat(lista){ save('config', {id:'categorias', lista}); }
+function renderCats(){
+  const qtd = nome => Object.values(S.receitas).filter(r => r.categoria === nome).length;
+  openDlg('cats', `<div class="dlg">${dlgHead('Categorias')}
+  <div class="dlg-body">
+    <p class="hint" style="margin-bottom:12px">Toque no nome para renomear. As receitas acompanham a mudança.</p>
+    <div class="linhas">${CATS.lista.map((c, i) => c === null ? '' : `<div class="linha" style="grid-template-columns:1fr 44px">
+      <input data-bind="cats.lista.${i}" value="${esc(c)}" aria-label="Nome da categoria" style="grid-column:auto">
+      <button class="icon-btn" data-act="catDel" data-i="${i}" aria-label="Excluir categoria">${ic(I.trash)}</button>
+      <p class="linha-custo">${qtd(CATS.orig[i] || c) ? qtd(CATS.orig[i] || c) + ' receita' + (qtd(CATS.orig[i] || c) > 1 ? 's' : '') : 'Nenhuma receita'}</p></div>`).join('')}</div>
+    <div class="row" style="margin-top:14px"><input data-bind="cats.nova" value="${esc(CATS.nova)}" placeholder="Nova categoria" aria-label="Nova categoria"><button class="btn" style="flex:0 0 auto" data-act="catAdd">Adicionar</button></div>
+  </div>
+  <div class="dlg-foot"><button class="btn primary" data-act="catSalvar">Salvar categorias</button></div></div>`);
 }
 function rfItemCusto(it){ if (!it.insumoId) return ''; const c = custoItem({...it, qtd:num(it.qtd)}); return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
 function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))});
@@ -869,19 +929,20 @@ async function gerarRelatorioPDF(ym){
   box(M + 3 * (bw + 3), bw, 'MARGEM', pct(r.mg), r.lucro < 0 ? VERM : VERDE, r.lucro < 0 ? [253,228,225] : [220,245,230]);
   y += 34;
   doc.setTextColor(...CINZA); doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  doc.text(t(`${r.lista.length} evento${r.lista.length === 1 ? '' : 's'} no mês` + (r.lista.length ? `, lucro médio de ${brl(r.lucro / r.lista.length)} por evento.` : '.')), M, y);
+  const totPend = r.pend.reduce((a, x) => a + num(x.p.valor), 0);
+  doc.text(t(`${r.lista.length} venda${r.lista.length === 1 ? '' : 's'} com dinheiro recebido no mês.` + (totPend ? ` A receber ainda neste mês: ${brl(totPend)}.` : '')), M, y);
   y += 10;
   const X = {data:M, ev:M + 20, ent:118, cus:146, luc:174, mg:W - M};
   const head = () => { doc.setFillColor(...CLARO); doc.roundedRect(M - 3, y - 6.5, W - 2 * M + 6, 10, 2, 2, 'F');
     doc.setTextColor(...ROXO); doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
     doc.text('DATA', X.data, y); doc.text('EVENTO', X.ev, y); doc.text('ENTROU', X.ent, y, {align:'right'}); doc.text('CUSTO', X.cus, y, {align:'right'}); doc.text('LUCRO', X.luc, y, {align:'right'}); doc.text('MARGEM', X.mg, y, {align:'right'}); y += 10; };
   head();
-  r.lista.forEach(l => {
-    const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
+  r.lista.forEach(x => {
+    const c = x.custo, f = x.entrou, lu = x.lucro;
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    const ls = doc.splitTextToSize(t(l.descricao), 62); const h = ls.length * 5;
+    const ls = doc.splitTextToSize(t(x.l.descricao + (x.parcial ? ' (parte)' : '')), 62); const h = ls.length * 5;
     if (y + h > 270){ doc.addPage(); y = 24; head(); doc.setFont('helvetica','normal'); doc.setFontSize(10); }
-    doc.setTextColor(...TINTA); doc.text(dataCurta(l.data), X.data, y); doc.text(ls, X.ev, y);
+    doc.setTextColor(...TINTA); doc.text(dataCurta(x.datas[0]), X.data, y); doc.text(ls, X.ev, y);
     doc.text(t(brl(f)), X.ent, y, {align:'right'}); doc.text(t(brl(c)), X.cus, y, {align:'right'});
     doc.setTextColor(...(lu < 0 ? VERM : VERDE)); doc.setFont('helvetica','bold'); doc.text(t(brl(lu)), X.luc, y, {align:'right'});
     doc.text(f ? pct(lu / f) : '', X.mg, y, {align:'right'});
@@ -894,7 +955,7 @@ async function gerarRelatorioPDF(ym){
   doc.text(t(brl(r.lucro)), X.luc, y + 1, {align:'right'}); doc.text(pct(r.mg), X.mg, y + 1, {align:'right'});
   const pgs = doc.getNumberOfPages();
   for (let p = 1; p <= pgs; p++){ doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...CINZA);
-    doc.text('Caderno de Custos. Custos calculados com os preços do dia de cada lançamento.', M, 289); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
+    doc.text('Valores contados no mês em que o dinheiro entrou. Custos proporcionais ao valor recebido.', M, 289); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
   return {blob: doc.output('blob'), nome: `relatorio-${ym}.pdf`};
 }
 async function compartilharRelatorio(){
@@ -987,6 +1048,10 @@ function exemplo(){
     const itens = [[ch, p], [fa, p], [ar, p]].map(([r, q]) => ({receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:q, unidade:r.rendUnid, custo:r2(custoReceita(r).total * q / r.rendimento)}));
     save('lancamentos', {id:uid(), data:ymd(dt), descricao:'Churrasco de sexta (exemplo)', itens, extras:ex, extrasDesc:'Gás e ajudante', custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:rec});
   });
+  const evt = addDias(hoje(), 7);
+  const itA = [[cx, 300], [bo, 32]].map(([r, q]) => ({receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:q, unidade:r.rendUnid, custo:r2(custoReceita(r).total * q / r.rendimento)}));
+  save('lancamentos', {id:uid(), data:evt, descricao:'Aniversário da Ana (exemplo)', itens:itA, extras:30, extrasDesc:'Entrega', custoItens:r2(itA.reduce((a, i) => a + i.custo, 0)), faturamento:600, pagamento:'entrada',
+    pagamentos:[{id:uid(), tipo:'entrada', data:hoje(), valor:300, recebido:true}, {id:uid(), tipo:'restante', data:evt, valor:300, recebido:false}]});
   const cu = r => custoReceita(r).total / r.rendimento;
   const its = [{receitaId:cx.id, nome:'Coxinha de frango', qtd:200, unid:'salgados', preco:.9, custoUnit:cu(cx)}, {receitaId:bo.id, nome:'Bolo de chocolate', qtd:32, unid:'fatias', preco:4.5, custoUnit:cu(bo)}, {receitaId:'', nome:'Entrega', qtd:1, unid:'', preco:20, custoUnit:0}];
   save('orcamentos', {id:uid(), numero:proxNumero(), data:hoje(), cliente:'Dona Maria (exemplo)', telefone:'', dataEvento:addDias(hoje(), 12), validade:7, obs:'50% de sinal para confirmar a data.', itens:its, extras:0, total:r2(its.reduce((a, i) => a + i.qtd * i.preco, 0)), custo:r2(its.reduce((a, i) => a + i.qtd * i.custoUnit, 0)), status:'enviado'});
@@ -1018,25 +1083,41 @@ const ACT = {
   qVenda: () => { const o = qSalvar('aprovado'); if (!o) return;
     const receitas = o.itens.filter(i => S.receitas[i.receitaId]);
     LAN = {...novoLan(), data:o.dataEvento || hoje(), descricao:'Pedido de ' + (o.cliente || 'cliente'), linhas:receitas.length ? receitas.map(i => ({receitaId:i.receitaId, qtd:inStr(i.qtd)})) : [{receitaId:'', qtd:''}], extras:inStr(o.extras || ''), recebido:inStr(o.total), orcId:o.id};
-    closeDlg(); TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
+    closeDlg(); TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira como foi pago e salve', ''); },
   qDel: async () => { if (await askConfirm('Excluir este orçamento?', 'Excluir')){ remove('orcamentos', Q.id); closeDlg(); render(); toast('Orçamento excluído'); } },
   salvarLan: () => {
     const itens = LAN.linhas.filter(l => S.receitas[l.receitaId] && num(l.qtd) > 0).map(l => { const r = S.receitas[l.receitaId];
       return {receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:num(l.qtd), unidade:r.rendUnid, custo:r2(custoReceita(r).total * num(l.qtd) / (num(r.rendimento) || 1))}; });
-    if (!LAN.data) return toast('Informe a data');
-    if (!num(LAN.recebido)) return toast('Informe quanto entrou');
-    save('lancamentos', {id:uid(), data:LAN.data, descricao:LAN.descricao.trim() || (itens[0] ? itens[0].nome : 'Venda'), itens, extras:num(LAN.extras), extrasDesc:LAN.extrasDesc.trim(), custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:num(LAN.recebido), orcId:LAN.orcId || ''});
-    LAN = novoLan(); render(); toast('Lançamento salvo');
+    if (!LAN.data) return toast('Informe a data do evento');
+    const tot = r2(num(LAN.recebido)); if (!tot) return toast('Informe o valor total da venda');
+    const h = hoje(); let pags;
+    if (LAN.pagamento === 'entrada'){ const e = r2(num(LAN.entrada)); if (!e || e >= tot) return toast('Informe uma entrada menor que o valor total');
+      pags = [{id:uid(), tipo:'entrada', data:LAN.dataEntrada || h, valor:e, recebido:true}, {id:uid(), tipo:'restante', data:LAN.data, valor:r2(tot - e), recebido:LAN.data <= h}];
+    } else if (LAN.pagamento === 'entrega') pags = [{id:uid(), tipo:'total', data:LAN.data, valor:tot, recebido:LAN.data <= h}];
+    else pags = [{id:uid(), tipo:'total', data:LAN.dataPag || h, valor:tot, recebido:true}];
+    save('lancamentos', {id:uid(), data:LAN.data, descricao:LAN.descricao.trim() || (itens[0] ? itens[0].nome : 'Venda'), itens, extras:num(LAN.extras), extrasDesc:LAN.extrasDesc.trim(), custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:tot, pagamento:LAN.pagamento, pagamentos:pags, orcId:LAN.orcId || ''});
+    const falta = pags.filter(p => !p.recebido).reduce((a, p) => a + p.valor, 0);
+    LAN = novoLan(); render(); toast(falta ? `Venda salva. ${brl(falta)} ficou em A receber` : 'Venda salva', 'ok');
   },
-  verLan: b => { const l = S.lancamentos[b.dataset.id]; const c = num(l.custoItens) + num(l.extras), lu = num(l.faturamento) - c;
+  pagto: b => { LAN.pagamento = b.dataset.v; render(); },
+  receber: b => { const l = clean(S.lancamentos[b.dataset.l]); const p = (l.pagamentos || []).find(x => x.id === b.dataset.p); if (!p) return;
+    p.previsto = p.previsto || p.data; p.data = hoje(); p.recebido = true; save('lancamentos', l);
+    toast(`Recebimento de ${brl(num(p.valor))} registrado hoje`, 'ok');
+    if (dlg().open && dlg().dataset.kind === 'verlan') ACT.verLan({dataset:{id:l.id}}); render(); },
+  naoRecebi: b => { const l = clean(S.lancamentos[b.dataset.l]); const p = (l.pagamentos || []).find(x => x.id === b.dataset.p); if (!p) return;
+    p.recebido = false; if (p.previsto) p.data = p.previsto; save('lancamentos', l);
+    toast('Voltou para A receber', 'ok'); ACT.verLan({dataset:{id:l.id}}); render(); },
+  verLan: b => { const l = S.lancamentos[b.dataset.id]; if (!l) return closeDlg(); const c = custoTotal(l), f = num(l.faturamento), lu = f - c;
     openDlg('verlan', `<div class="dlg">${dlgHead(esc(l.descricao))}
-    <div class="dlg-body"><p class="hint">${new Date(l.data + 'T12:00').toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</p>
-    <div class="lucro-box ${lu < 0 ? 'neg' : ''}" style="margin-top:10px"><span>${lu < 0 ? 'Prejuízo' : 'Lucro'}</span><strong>${brl(lu)}</strong><span>${num(l.faturamento) ? pct(lu / num(l.faturamento)) + ' do que entrou' : ''}</span></div>
+    <div class="dlg-body"><p class="hint">Evento em ${new Date(l.data + 'T12:00').toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</p>
+    <div class="lucro-box ${lu < 0 ? 'neg' : ''}" style="margin-top:10px"><span>${lu < 0 ? 'Prejuízo' : 'Lucro'} da venda</span><strong>${brl(lu)}</strong><span>${f ? pct(lu / f) + ' do valor da venda' : ''}</span></div>
+    <h3 style="margin:16px 0 8px">Pagamentos</h3><div class="list" style="background:var(--bg)">${pagamentosDe(l).map(p => `<div class="item" style="cursor:default"><span><b>${tipoPag[p.tipo] || 'Pagamento'}: ${brl(num(p.valor))}</b><small>${p.recebido ? 'Recebido em ' + dataBR(p.data) : 'A receber, previsto para ' + dataBR(p.data)}</small></span><span class="val">${p.id === 'p0' ? '' : p.recebido ? `<button class="btn small" data-act="naoRecebi" data-l="${l.id}" data-p="${p.id}">Desfazer</button>` : `<button class="btn small manga" data-act="receber" data-l="${l.id}" data-p="${p.id}">Recebi</button>`}</span></div>`).join('')}</div>
+    <h3 style="margin:16px 0 8px">Custos</h3>
     <dl class="resumo">${(l.itens || []).map(i => `<div><dt>${esc(i.nome)}, ${fq(i.qtd)} ${esc(i.unidade)}</dt><dd>${brl(i.custo)}</dd></div>`).join('')}
     ${num(l.extras) ? `<div><dt>Extras${l.extrasDesc ? ' (' + esc(l.extrasDesc) + ')' : ''}</dt><dd>${brl(num(l.extras))}</dd></div>` : ''}
-    <div class="total"><dt>Custo total</dt><dd>${brl(c)}</dd></div><div><dt>Entrou</dt><dd>${brl(num(l.faturamento))}</dd></div></dl>
-    <p class="hint" style="margin-top:10px">Os custos acima são os do dia do lançamento.</p></div>
-    <div class="dlg-foot"><button class="btn danger" data-act="delLan" data-id="${l.id}">Excluir lançamento</button></div></div>`); },
+    <div class="total"><dt>Custo total</dt><dd>${brl(c)}</dd></div><div><dt>Valor da venda</dt><dd>${brl(f)}</dd></div></dl>
+    <p class="hint" style="margin-top:10px">Os custos são os do dia do lançamento.</p></div>
+    <div class="dlg-foot"><button class="btn danger" data-act="delLan" data-id="${l.id}">Excluir venda</button></div></div>`); },
   delLan: async b => { if (await askConfirm('Excluir este lançamento?', 'Excluir')){ remove('lancamentos', b.dataset.id); closeDlg(); render(); toast('Lançamento excluído'); } },
   mes: b => { let [y, m] = REL.split('-').map(Number); m += +b.dataset.d; if (m < 1){ m = 12; y--; } if (m > 12){ m = 1; y++; } REL = `${y}-${pad(m)}`; render(); },
   relPDF: () => compartilharRelatorio(),
@@ -1053,7 +1134,30 @@ const ACT = {
   salvarReceita: () => { if (!RF.nome.trim()) return toast('Dê um nome à receita'); if (!num(RF.rendimento)) return toast('Informe quanto a receita rende');
     const itens = RF.itens.filter(i => i.insumoId && num(i.qtd) > 0).map(i => ({insumoId:i.insumoId, qtd:num(i.qtd), unidade:i.unidade}));
     if (!itens.length) return toast('Adicione pelo menos um ingrediente');
-    save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:RF.categoria, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens}); closeDlg(); render(); toast('Receita salva'); },
+    let cat = RF.categoria;
+    if (cat === '__nova'){ const nome = (RF.novaCat || '').trim(); if (!nome) return toast('Dê um nome à nova categoria');
+      cat = acharCat(nome) || nome; if (!acharCat(nome)) salvarListaCat([...categorias(), nome]); }
+    save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:cat, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens}); closeDlg(); render(); toast('Receita salva'); },
+  categorias: () => { const l = categorias(); CATS = {lista:[...l], orig:[...l], nova:''}; renderCats(); },
+  catAdd: () => { const n = (CATS.nova || '').trim(); if (!n) return toast('Digite o nome da categoria');
+    if (CATS.lista.some(c => c && c.trim().toLowerCase() === n.toLowerCase())) return toast('Não dá: essa categoria já existe');
+    CATS.lista.push(n); CATS.orig.push(null); CATS.nova = ''; renderCats(); },
+  catDel: b => { const i = +b.dataset.i; const nome = CATS.orig[i] || CATS.lista[i];
+    const usadas = Object.values(S.receitas).filter(r => r.categoria === nome).length;
+    if (nome === 'Outros' && usadas) return toast('Não dá para excluir Outros enquanto houver receitas nela');
+    CATS.lista[i] = null; renderCats(); if (usadas) toast(`${usadas} receita${usadas > 1 ? 's vão' : ' vai'} para Outros ao salvar`, ''); },
+  catSalvar: () => {
+    const final = [], mapa = {};
+    for (let i = 0; i < CATS.lista.length; i++){
+      const v = CATS.lista[i], o = CATS.orig[i];
+      if (v === null){ if (o) mapa[o] = 'Outros'; continue; }
+      const n = v.trim(); if (!n) return toast('Não deixe categoria sem nome');
+      if (final.some(c => c.toLowerCase() === n.toLowerCase())) return toast(`Não dá: "${n}" aparece duas vezes`);
+      final.push(n); if (o && o !== n) mapa[o] = n;
+    }
+    if (Object.values(mapa).includes('Outros') && !final.includes('Outros')) final.push('Outros');
+    Object.values(S.receitas).forEach(r => { if (mapa[r.categoria]) save('receitas', {...r, categoria:mapa[r.categoria]}); });
+    salvarListaCat(final); closeDlg(); render(); toast('Categorias salvas'); },
   delReceita: async () => { if (await askConfirm('Excluir esta receita? Os lançamentos antigos continuam no relatório.', 'Excluir')){ remove('receitas', RF.id); closeDlg(); render(); toast('Receita excluída'); } },
   salvarNeg: () => { save('config', {...NEG, id:'negocio', nome:NEG.nome.trim(), telefone:fmtTel(NEG.telefone), cidade:NEG.cidade.trim(), pix:NEG.pix.trim(), obsPadrao:NEG.obsPadrao.trim()}); toast('Dados do negócio salvos'); render(); },
   exportar: () => exportar(),
@@ -1080,7 +1184,7 @@ function bind(t){
   o[parts.at(-1)] = t.value;
   if (f === 'rf' && parts[0] === 'itens' && parts[2] === 'insumoId'){ const ins = S.insumos[t.value]; if (ins) o.unidade = FAM_UNITS[UNITS[ins.unidade].f][0]; }
   if (f === 'orc'){ $('#orc-result').innerHTML = orcResult(); if (parts[0] === 'margem') document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.v === t.value)); }
-  if (f === 'lan') $('#lan-result').innerHTML = lanResult();
+  if (f === 'lan'){ $('#lan-result').innerHTML = lanResult(); const ph = $('#lan-pag-hint'); if (ph) ph.innerHTML = pagHint(); }
   if (f === 'ins') $('#ins-prev').innerHTML = insPrev();
   if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); }
   if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
