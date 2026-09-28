@@ -324,6 +324,20 @@ function categorias(){
   Object.values(S.receitas || {}).forEach(r => { if (r.categoria && !l.includes(r.categoria)) l.push(r.categoria); });
   return l;
 }
+const prevYM = ym => { let [y, m] = ym.split('-').map(Number); m--; if (m < 1){ m = 12; y--; } return `${y}-${pad(m)}`; };
+// Despesas fixas valem todo mês a partir de "desde" (até "ate", se encerrada); um mês pode ter valor ajustado. Avulsas valem só no próprio mês.
+function despesasMes(ym){
+  const out = [];
+  Object.values(S.despesas || {}).forEach(d => {
+    if (d.tipo === 'avulsa'){ if (d.mes === ym) out.push({d, valor:num(d.valor), ajustado:false}); return; }
+    if ((d.desde || '0000-00') > ym || (d.ate && ym > d.ate)) return;
+    const aj = !!(d.ajustes && d.ajustes[ym] != null);
+    out.push({d, valor:aj ? num(d.ajustes[ym]) : num(d.valor), ajustado:aj});
+  });
+  return out.sort((a,b) => (a.d.tipo === 'avulsa') - (b.d.tipo === 'avulsa') || a.d.nome.localeCompare(b.d.nome));
+}
+const totalDesp = ym => despesasMes(ym).reduce((a, x) => a + x.valor, 0);
+const despItem = x => `<button class="item" data-act="editDesp" data-id="${x.d.id}"><span><b>${esc(x.d.nome)}</b><small>${x.d.tipo === 'avulsa' ? 'Só neste mês' : 'Todo mês' + (x.ajustado ? ', valor ajustado neste mês' : '')}</small></span><span class="val">${brl(x.valor)}</span></button>`;
 const acharCat = nome => categorias().find(c => c.toLowerCase() === nome.trim().toLowerCase());
 
 function toast(msg, tipo){
@@ -353,8 +367,8 @@ const Local = {
     try { localStorage.setItem('cc:' + k, JSON.stringify(v)); } catch(e){} return Promise.resolve(); }
 };
 
-const COLS = ['insumos','receitas','lancamentos','orcamentos','config'];
-let S = { insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, meta:{} };
+const COLS = ['insumos','receitas','lancamentos','orcamentos','config','despesas'];
+let S = { insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, despesas:{}, meta:{} };
 const persist = () => Local.set('state', S);
 function save(col, obj){ obj.atualizadoEm = new Date().toISOString(); S[col][obj.id] = obj; persist(); Cloud.put(col, obj); }
 function remove(col, id){ delete S[col][id]; persist(); Cloud.del(col, id); }
@@ -472,8 +486,8 @@ let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20', modo:'pct',
 const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje() });
 let LAN = novoLan();
 let REL = hoje().slice(0, 7);
-let RF = null, INS = null, Q = null, NEG = null, CATS = null, BUSCA = '';
-const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS };
+let RF = null, INS = null, Q = null, NEG = null, CATS = null, DP = null, BUSCA = '';
+const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS, dp:() => DP };
 
 /* ============ Ícones ============ */
 const ic = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -563,8 +577,10 @@ const VIEWS = {
     const temIns = Object.keys(S.insumos).length, temRec = Object.keys(S.receitas).length, temOrc = Object.keys(S.orcamentos).length + Object.keys(S.lancamentos).length;
     const orcs = orcsOrdenados().slice(0, 4);
     return `<h2>${neg.nome ? 'Olá, ' + esc(neg.nome) : 'Olá!'}</h2><p class="intro">O que vamos fazer hoje?</p>
-    ${temIns && temRec ? `<div class="hero"><span>Seu lucro em ${mesNome(hoje().slice(0, 7)).split(' ')[0].toLowerCase()}</span><strong>${brl(r.lucro)}</strong>
-      <div class="mini"><span>Entrou<b>${brl(r.fat)}</b></span><span>Margem<b>${pct(r.mg)}</b></span><span>Vendas<b>${r.lista.length}</b></span></div></div>` : `
+    ${temIns && temRec ? (() => { const ym = hoje().slice(0, 7), dsp = totalDesp(ym);
+      return `<div class="hero"><span>Sobrou em ${mesNome(ym).split(' ')[0].toLowerCase()}</span><strong>${brl(r.lucro - dsp)}</strong>
+      <div class="mini"><span>Lucro das vendas<b>${brl(r.lucro)}</b></span><span>Despesas<b>${brl(dsp)}</b></span><span>Entrou<b>${brl(r.fat)}</b></span></div></div>
+      ${!Object.keys(S.despesas).length && Object.keys(S.lancamentos).length ? `<div class="banner"><span>Cadastre gás, luz e transporte para ver quanto sobra de verdade.</span><button data-act="novaDesp" data-mes="${ym}">Cadastrar</button></div>` : ''}`; })() : `
     <div class="panel"><h3>Primeiros passos</h3><ol class="passos">
       <li class="${temIns ? 'ok' : ''}"><b>${temIns ? '✓' : '1'}</b><span>Cadastre o que você compra</span>${temIns ? '' : '<button class="btn small primary" data-act="novoInsumo">Fazer</button>'}</li>
       <li class="${temRec ? 'ok' : ''}"><b>${temRec ? '✓' : '2'}</b><span>Monte as receitas</span>${!temIns || temRec ? '' : '<button class="btn small primary" data-act="novaReceita">Fazer</button>'}</li>
@@ -630,25 +646,30 @@ const VIEWS = {
   },
   rel(){
     const {lista, fat, custo, lucro, mg, pend} = resumoMes(REL);
+    const desp = despesasMes(REL), totDesp = desp.reduce((a, x) => a + x.valor, 0), sobra = lucro - totDesp;
     const max = Math.max(1, ...lista.map(x => Math.max(x.entrou, x.custo)));
     const totPend = pend.reduce((a, x) => a + num(x.p.valor), 0);
-    return `<h2>Relatório do mês</h2><p class="intro no-print">Cada valor conta no mês em que o dinheiro entrou. O custo acompanha na mesma proporção.</p>
+    return `<h2>Relatório do mês</h2><p class="intro no-print">Cada valor conta no mês em que o dinheiro entrou. No fim, as despesas do mês são descontadas.</p>
     <div class="mes"><button class="icon-btn no-print" data-act="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${mesNome(REL)}</strong><button class="icon-btn no-print" data-act="mes" data-d="1" aria-label="Próximo mês">›</button></div>
-    ${!lista.length && !pend.length ? `<div class="panel empty"><h3>Nada neste mês</h3><p>Quando você lançar uma venda, o dinheiro aparece aqui no mês em que entrou.</p><button class="btn primary" data-act="tab" data-id="lan">Lançar venda</button></div>` : `
-    ${lista.length ? `
-    <div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>Você ganhou</span><strong>${brl(lucro)}</strong><span>${pct(mg)} do que entrou</span></div>
+    ${lista.length || desp.length ? `
+    <div class="lucro-box ${sobra < 0 ? 'neg' : ''}"><span>Sobrou no mês</span><strong>${brl(sobra)}</strong><span>Lucro das vendas ${brl(lucro)} menos despesas ${brl(totDesp)}</span></div>
     <div class="kpis">
       <div class="kpi"><span>Entrou</span><strong>${brl(fat)}</strong></div>
-      <div class="kpi"><span>Custos</span><strong>${brl(custo)}</strong></div>
-      <div class="kpi"><span>Vendas</span><strong>${lista.length}</strong></div>
-      <div class="kpi"><span>A receber no mês</span><strong>${brl(totPend)}</strong></div>
-    </div>
+      <div class="kpi"><span>Custo das vendas</span><strong>${brl(custo)}</strong></div>
+      <div class="kpi"><span>Lucro das vendas</span><strong>${brl(lucro)}</strong><span>${fat ? pct(mg) + ' do que entrou' : ''}</span></div>
+      <div class="kpi"><span>Despesas do mês</span><strong>${brl(totDesp)}</strong></div>
+    </div>` : ''}
+    ${lista.length ? `
     <div class="panel"><h3>Venda por venda</h3><div class="bars">${lista.map(x => `<div><div class="bar-meta"><span>${dataCurta(x.datas[0])} ${esc(x.l.descricao)}${x.parcial ? ' (parte)' : ''}</span><span class="${x.lucro < 0 ? 'negt' : 'pos'}"><b>${brl(x.lucro)}</b> ${x.entrou ? '(' + pct(x.lucro / x.entrou) + ')' : ''}</span></div>
       <div class="bar"><i class="c" style="width:${Math.min(x.custo, x.entrou || x.custo) / max * 100}%"></i><i class="l" style="width:${Math.max(x.lucro, 0) / max * 100}%"></i></div></div>`).join('')}</div>
       <div class="legend"><span><i style="background:var(--acai);opacity:.35"></i>Custo</span><span><i style="background:var(--lucro)"></i>Lucro</span></div></div>
-    <p class="group-title">Dinheiro que entrou</p><div class="list">${lista.map(relItem).join('')}</div>` : `<div class="panel"><h3>Nada recebido neste mês ainda</h3><p class="hint">Os valores abaixo estão previstos para este mês.</p></div>`}
+    <p class="group-title">Dinheiro que entrou</p><div class="list">${lista.map(relItem).join('')}</div>`
+    : `<div class="panel empty"><h3>Nenhum dinheiro recebido neste mês</h3><p>${pend.length ? 'Os valores a receber estão logo abaixo.' : 'Quando você lançar uma venda, o dinheiro aparece aqui no mês em que entrou.'}</p>${pend.length ? '' : '<button class="btn primary" data-act="tab" data-id="lan">Lançar venda</button>'}</div>`}
     ${pend.length ? `<p class="group-title">A receber neste mês: ${brl(totPend)}</p><div class="list">${pend.map(pendItem).join('')}</div>` : ''}
-    ${lista.length ? `<div class="btns no-print"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>` : ''}`}`;
+    <p class="group-title">Despesas do mês${totDesp ? ': ' + brl(totDesp) : ''}</p>
+    ${desp.length ? `<div class="list">${desp.map(despItem).join('')}</div>` : `<div class="panel"><p class="hint">Cadastre gás, luz, água, transporte, internet e outras contas do negócio para ver quanto sobra de verdade.</p></div>`}
+    <button class="btn ghost wide no-print" data-act="novaDesp">Adicionar despesa</button>
+    ${lista.length || desp.length ? `<div class="btns no-print" style="margin-top:14px"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>` : ''}`;
   },
   cad(){
     return `<h2>Cadastros</h2><p class="intro">${CAD === 'rec' ? 'Cada receita diz quanto de cada insumo você usa e quanto ela rende.' : 'Quando um preço mudar, atualize aqui e todas as receitas se recalculam.'}</p>
@@ -735,7 +756,7 @@ function pagHint(){
 /* ============ Diálogos ============ */
 const dlg = () => $('#dlg');
 function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; normMoney(d); if (!d.open) d.showModal(); }
-function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = null; }
+function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = DP = null; }
 dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
 function askConfirm(msg, ok = 'Confirmar'){
   return new Promise(res => { const c = $('#cfm');
@@ -788,6 +809,27 @@ function renderRf(){
     <p class="hint" id="rf-preco-hint" style="margin-bottom:6px">${rfPrecoHint()}</p>
   </div>
   <div class="dlg-foot">${RF.id ? '<button class="btn danger" data-act="delReceita">Excluir</button>' : ''}<button class="btn primary" data-act="salvarReceita">Salvar</button></div></div>`);
+}
+function openDesp(id, mes){
+  if (id){ const d = S.despesas[id];
+    DP = {...clean(d), valor:moneyStr(num(d.valor)), mesRef:mes || REL, valorMes:d.tipo !== 'avulsa' && d.ajustes && d.ajustes[mes || REL] != null ? moneyStr(num(d.ajustes[mes || REL])) : ''}; }
+  else DP = {id:'', nome:'', valor:'', tipo:'fixa', mesRef:mes || REL, valorMes:''};
+  renderDesp();
+}
+function renderDesp(){
+  const mes = mesNome(DP.mesRef), fixa = DP.tipo !== 'avulsa';
+  openDlg('desp', `<div class="dlg">${dlgHead(DP.id ? 'Editar despesa' : 'Nova despesa')}
+  <div class="dlg-body">
+    <label class="field"><span>Nome</span><input data-bind="dp.nome" value="${esc(DP.nome)}" placeholder="Gás, luz, transporte, internet"></label>
+    ${DP.id ? '' : `<div class="field"><span>Quando conta</span><div class="seg" role="group" aria-label="Quando conta" style="background:var(--bg);margin:2px 0 0"><button data-act="despTipo" data-v="fixa" aria-pressed="${fixa}">Todo mês</button><button data-act="despTipo" data-v="avulsa" aria-pressed="${!fixa}">Só em ${mes.split(' ')[0].toLowerCase()}</button></div></div>`}
+    <label class="field"><span>${fixa ? 'Valor por mês' : 'Valor'}</span><div class="prefix"><input inputmode="decimal" data-bind="dp.valor" value="${esc(DP.valor)}" placeholder="0,00"></div></label>
+    ${!DP.id && fixa ? `<p class="hint">Entra em todos os meses a partir de ${mes.toLowerCase()}. Se num mês a conta vier diferente, como a de luz, é só abrir a despesa naquele mês e ajustar.</p>` : ''}
+    ${!DP.id && !fixa ? `<p class="hint">Conta só no relatório de ${mes.toLowerCase()}. Bom para gastos que não se repetem, como o conserto do freezer.</p>` : ''}
+    ${DP.id && fixa ? `<label class="field"><span>Valor em ${mes.toLowerCase()}</span><div class="prefix"><input inputmode="decimal" data-bind="dp.valorMes" value="${esc(DP.valorMes)}" placeholder="Igual ao valor por mês"></div></label>
+      <p class="hint">Preencha só se a conta deste mês veio diferente. Em branco, vale o valor por mês. Conta desde ${mesNome(DP.desde || DP.mesRef).toLowerCase()}.</p>
+      <div class="btns"><button class="btn small" style="flex:1" data-act="despParar">Parar de contar a partir de ${mes.split(' ')[0].toLowerCase()}</button></div>` : ''}
+  </div>
+  <div class="dlg-foot">${DP.id ? '<button class="btn danger" data-act="despDel">Excluir</button>' : ''}<button class="btn primary" data-act="despSalvar">Salvar</button></div></div>`);
 }
 function salvarListaCat(lista){ save('config', {id:'categorias', lista}); }
 function renderCats(){
@@ -956,7 +998,7 @@ async function gerarRelatorioPDF(ym){
   await loadScript(JSPDF);
   const {jsPDF} = window.jspdf; const doc = new jsPDF({unit:'mm', format:'a4'});
   const W = 210, M = 16, t = s => String(s ?? '').replace(/[\u00a0\u202f]/g, ' ');
-  const n = negocio(), r = resumoMes(ym);
+  const n = negocio(), r = resumoMes(ym), desp = despesasMes(ym), totDesp = desp.reduce((a, x) => a + x.valor, 0), sobra = r.lucro - totDesp;
   const ROXO = [123,31,162], MANGA = [255,179,32], TINTA = [31,20,48], CINZA = [107,95,122], CLARO = [245,236,251], VERDE = [14,159,79], VERM = [224,53,43];
   doc.setFillColor(...ROXO); doc.rect(0, 0, W, 36, 'F'); doc.setFillColor(...MANGA); doc.rect(0, 36, W, 2.5, 'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19);
@@ -970,12 +1012,12 @@ async function gerarRelatorioPDF(ym){
   const bw = (W - 2 * M - 9) / 4;
   box(M, bw, 'ENTROU', brl(r.fat), TINTA, CLARO);
   box(M + (bw + 3), bw, 'CUSTOS', brl(r.custo), TINTA, CLARO);
-  box(M + 2 * (bw + 3), bw, 'LUCRO', brl(r.lucro), r.lucro < 0 ? VERM : VERDE, r.lucro < 0 ? [253,228,225] : [220,245,230]);
-  box(M + 3 * (bw + 3), bw, 'MARGEM', pct(r.mg), r.lucro < 0 ? VERM : VERDE, r.lucro < 0 ? [253,228,225] : [220,245,230]);
+  box(M + 2 * (bw + 3), bw, 'DESPESAS', brl(totDesp), TINTA, CLARO);
+  box(M + 3 * (bw + 3), bw, 'SOBROU', brl(sobra), sobra < 0 ? VERM : VERDE, sobra < 0 ? [253,228,225] : [220,245,230]);
   y += 34;
   doc.setTextColor(...CINZA); doc.setFont('helvetica','normal'); doc.setFontSize(10);
   const totPend = r.pend.reduce((a, x) => a + num(x.p.valor), 0);
-  doc.text(t(`${r.lista.length} venda${r.lista.length === 1 ? '' : 's'} com dinheiro recebido no mês.` + (totPend ? ` A receber ainda neste mês: ${brl(totPend)}.` : '')), M, y);
+  doc.text(t(`${r.lista.length} venda${r.lista.length === 1 ? '' : 's'} com dinheiro recebido. Lucro das vendas: ${brl(r.lucro)} (${pct(r.mg)} do que entrou).` + (totPend ? ` A receber: ${brl(totPend)}.` : '')), M, y, {maxWidth:W - 2 * M});
   y += 10;
   const X = {data:M, ev:M + 20, ent:118, cus:146, luc:174, mg:W - M};
   const head = () => { doc.setFillColor(...CLARO); doc.roundedRect(M - 3, y - 6.5, W - 2 * M + 6, 10, 2, 2, 'F');
@@ -996,11 +1038,22 @@ async function gerarRelatorioPDF(ym){
   if (y > 262){ doc.addPage(); y = 24; }
   doc.setFillColor(...MANGA); doc.roundedRect(M - 3, y - 6, W - 2 * M + 6, 11, 2, 2, 'F');
   doc.setTextColor(59,37,0); doc.setFont('helvetica','bold'); doc.setFontSize(10);
-  doc.text('TOTAL DO MÊS', X.data, y + 1); doc.text(t(brl(r.fat)), X.ent, y + 1, {align:'right'}); doc.text(t(brl(r.custo)), X.cus, y + 1, {align:'right'});
+  doc.text('TOTAL DAS VENDAS', X.data, y + 1); doc.text(t(brl(r.fat)), X.ent, y + 1, {align:'right'}); doc.text(t(brl(r.custo)), X.cus, y + 1, {align:'right'});
   doc.text(t(brl(r.lucro)), X.luc, y + 1, {align:'right'}); doc.text(pct(r.mg), X.mg, y + 1, {align:'right'});
+  y += 18;
+  if (y + 14 + desp.length * 7 > 275){ doc.addPage(); y = 24; }
+  doc.setTextColor(...ROXO); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text('DESPESAS DO MÊS', M, y); y += 7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  if (!desp.length){ doc.setTextColor(...CINZA); doc.text('Nenhuma despesa cadastrada.', M, y); y += 7; }
+  desp.forEach(x => { if (y > 272){ doc.addPage(); y = 24; } doc.setTextColor(...TINTA); doc.text(t(x.d.nome + (x.d.tipo === 'avulsa' ? ' (só neste mês)' : '')), M, y); doc.text(t(brl(x.valor)), W - M, y, {align:'right'});
+    doc.setDrawColor(232,223,241); doc.line(M, y + 2.5, W - M, y + 2.5); y += 7; });
+  y += 4; if (y > 268){ doc.addPage(); y = 24; }
+  doc.setFillColor(...(sobra < 0 ? [253,228,225] : [220,245,230])); doc.roundedRect(M - 3, y - 6, W - 2 * M + 6, 14, 2, 2, 'F');
+  doc.setTextColor(...(sobra < 0 ? VERM : VERDE)); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.text('SOBROU NO MÊS', M, y + 2.5); doc.text(t(brl(sobra)), W - M, y + 2.5, {align:'right'});
   const pgs = doc.getNumberOfPages();
   for (let p = 1; p <= pgs; p++){ doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...CINZA);
-    doc.text('Valores contados no mês em que o dinheiro entrou. Custos proporcionais ao valor recebido.', M, 289); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
+    doc.text('Valores no mês em que o dinheiro entrou. Custos proporcionais ao valor recebido. Sobrou = lucro das vendas - despesas.', M, 289); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
   return {blob: doc.output('blob'), nome: `relatorio-${ym}.pdf`};
 }
 async function compartilharRelatorio(){
@@ -1100,6 +1153,7 @@ function exemplo(){
   const cu = r => custoReceita(r).total / r.rendimento;
   const its = [{receitaId:cx.id, nome:'Coxinha de frango', qtd:200, unid:'salgados', preco:.9, custoUnit:cu(cx)}, {receitaId:bo.id, nome:'Bolo de chocolate', qtd:32, unid:'fatias', preco:4.5, custoUnit:cu(bo)}, {receitaId:'', nome:'Entrega', qtd:1, unid:'', preco:20, custoUnit:0}];
   save('orcamentos', {id:uid(), numero:proxNumero(), data:hoje(), cliente:'Dona Maria (exemplo)', telefone:'', dataEvento:addDias(hoje(), 12), validade:7, obs:'50% de sinal para confirmar a data.', itens:its, extras:0, total:r2(its.reduce((a, i) => a + i.qtd * i.preco, 0)), custo:r2(its.reduce((a, i) => a + i.qtd * i.custoUnit, 0)), status:'enviado'});
+  [['Gás de cozinha', 140], ['Energia (parte do negócio)', 120], ['Transporte e combustível', 200]].forEach(([nome, valor]) => save('despesas', {id:uid(), nome, valor, tipo:'fixa', desde:hoje().slice(0, 7), ate:'', ajustes:{}}));
   REL = hoje().slice(0, 7); closeDlg(); toast('Exemplo carregado'); render();
 }
 
@@ -1191,6 +1245,24 @@ const ACT = {
     if (cat === '__nova'){ const nome = (RF.novaCat || '').trim(); if (!nome) return toast('Dê um nome à nova categoria');
       cat = acharCat(nome) || nome; if (!acharCat(nome)) salvarListaCat([...categorias(), nome]); }
     save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:cat, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens, preco:r2(num(RF.preco))}); closeDlg(); render(); toast('Receita salva'); },
+  novaDesp: b => openDesp('', b.dataset.mes || REL),
+  editDesp: b => openDesp(b.dataset.id, REL),
+  despTipo: b => { DP.tipo = b.dataset.v; renderDesp(); },
+  despSalvar: () => { const nome = DP.nome.trim(), v = r2(num(DP.valor));
+    if (!nome) return toast('Dê um nome à despesa'); if (!v) return toast('Informe o valor da despesa');
+    let o;
+    if (DP.id){ o = clean(S.despesas[DP.id]); o.nome = nome; o.valor = v;
+      if (o.tipo !== 'avulsa'){ o.ajustes = o.ajustes || {}; const vm = r2(num(DP.valorMes));
+        if (vm && Math.abs(vm - v) > .004) o.ajustes[DP.mesRef] = vm; else delete o.ajustes[DP.mesRef]; } }
+    else o = DP.tipo === 'avulsa' ? {id:uid(), nome, valor:v, tipo:'avulsa', mes:DP.mesRef} : {id:uid(), nome, valor:v, tipo:'fixa', desde:DP.mesRef, ate:'', ajustes:{}};
+    save('despesas', o); closeDlg(); render(); toast('Despesa salva'); },
+  despParar: async () => { const o = clean(S.despesas[DP.id]), mes = mesNome(DP.mesRef).toLowerCase();
+    if ((o.desde || '') >= DP.mesRef){ if (await askConfirm(`Essa despesa começou em ${mes}. Parar agora é o mesmo que excluir. Excluir?`, 'Excluir')){ remove('despesas', o.id); closeDlg(); render(); toast('Despesa excluída'); } return; }
+    if (!await askConfirm(`Parar de contar "${o.nome}" a partir de ${mes}? Os meses anteriores continuam com ela.`, 'Parar')) return;
+    o.ate = prevYM(DP.mesRef); save('despesas', o); closeDlg(); render(); toast(`Despesa encerrada a partir de ${mes}`, 'ok'); },
+  despDel: async () => { const o = S.despesas[DP.id];
+    const msg = o.tipo === 'avulsa' ? 'Excluir esta despesa?' : 'Excluir esta despesa de todos os meses? Se ela só acabou agora, use "Parar de contar".';
+    if (await askConfirm(msg, 'Excluir')){ remove('despesas', o.id); closeDlg(); render(); toast('Despesa excluída'); } },
   categorias: () => { const l = categorias(); CATS = {lista:[...l], orig:[...l], nova:''}; renderCats(); },
   catAdd: () => { const n = (CATS.nova || '').trim(); if (!n) return toast('Digite o nome da categoria');
     if (CATS.lista.some(c => c && c.trim().toLowerCase() === n.toLowerCase())) return toast('Não dá: essa categoria já existe');
@@ -1278,7 +1350,7 @@ document.addEventListener('change', e => {
   aplicarTema(temaAtual());
   await Local.open();
   const salvo = await Local.get('state');
-  if (salvo && typeof salvo === 'object') S = {insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, meta:{}, ...salvo};
+  if (salvo && typeof salvo === 'object') S = {insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, despesas:{}, meta:{}, ...salvo};
   COLS.forEach(c => S[c] ||= {});
   if (!HTMLElement.prototype.showPopover) $('#toast').style.display = 'none';
   render();

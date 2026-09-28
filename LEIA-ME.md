@@ -76,10 +76,21 @@ O gerador de PDF (jsPDF) é baixado na primeira vez que o app abre com internet 
 
 Na aba **Relatório**, escolha o mês e toque em **Gerar PDF do relatório**. O PDF traz o total que entrou, os custos, o lucro, a margem e uma linha por evento. No celular ele abre o menu de compartilhar; no computador, é baixado.
 
+## Despesas do mês
+
+No **Relatório**, em **Despesas do mês**, toque em **Adicionar despesa**:
+
+- **Todo mês:** gás, luz, internet, transporte. Entra automaticamente em todos os meses a partir do mês em que foi cadastrada.
+- **Só neste mês:** gastos que não se repetem, como o conserto de um equipamento.
+
+Se a conta de um mês vier diferente (a de luz, por exemplo), abra a despesa naquele mês e preencha **Valor em (mês)**. Os outros meses continuam com o valor normal. Quando uma despesa acabar, use **Parar de contar a partir de (mês)**: os meses anteriores continuam com ela.
+
+O relatório, a tela Início e o PDF mostram o **Sobrou no mês** = lucro das vendas − despesas do mês.
+
 ## Como os dados são guardados
 
 - **No celular:** IndexedDB, com pedido de armazenamento persistente para o Android não apagar os dados.
-- **Na nuvem (opcional):** Firestore, em `users/{id-da-conta}/insumos`, `/receitas`, `/lancamentos`, `/orcamentos` e `/config`.
+- **Na nuvem (opcional):** Firestore, em `users/{id-da-conta}/insumos`, `/receitas`, `/lancamentos`, `/orcamentos`, `/config` e `/despesas`.
 - **Backup em arquivo:** um `.json` que pode ir para o Google Drive ou WhatsApp. O app lembra de fazer backup a cada 30 dias quando a nuvem está desligada.
 
 ## Como os números são calculados
