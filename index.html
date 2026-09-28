@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2A0D45">
+<script>try{const t=localStorage.getItem('cc:tema')||'dark';if(t!=='auto')document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}</script>
+<title>Caderno de Custos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F1FB; --card:#FFFFFF; --ink:#1F1430; --muted:#6B5F7A; --line:#E8DFF1;
+  --acai:#7B1FA2; --acai-ink:#FFFFFF; --acai-soft:#F2E3FA; --head:#6A1B9A;
+  --manga:#FFB320; --manga-ink:#3B2500; --manga-soft:#FFF2D3;
+  --urucum:#FF5B3A; --urucum-soft:#FFE7E0;
+  --lucro:#0E9F4F; --lucro-soft:#DCF5E6; --neg:#E0352B; --neg-soft:#FDE4E1;
+  --display:"Bricolage Grotesque", "Segoe UI", Roboto, system-ui, sans-serif;
+  --body:"Plus Jakarta Sans", "Segoe UI", Roboto, system-ui, sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E0914; --card:#1B1326; --ink:#F4EEFA; --muted:#B0A3C0; --line:#2F2340;
+    --acai:#C77DFF; --acai-ink:#1F0B30; --acai-soft:#2E1B44; --head:#2A0D45;
+    --manga:#FFC24D; --manga-soft:#3A2C12; --urucum:#FF8468; --urucum-soft:#40201A;
+    --lucro:#3DDC84; --lucro-soft:#15352A; --neg:#FF7A6E; --neg-soft:#40201E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E0914; --card:#1B1326; --ink:#F4EEFA; --muted:#B0A3C0; --line:#2F2340;
+  --acai:#C77DFF; --acai-ink:#1F0B30; --acai-soft:#2E1B44; --head:#2A0D45;
+  --manga:#FFC24D; --manga-soft:#3A2C12; --urucum:#FF8468; --urucum-soft:#40201A;
+  --lucro:#3DDC84; --lucro-soft:#15352A; --neg:#FF7A6E; --neg-soft:#40201E;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;-webkit-tap-highlight-color:transparent}
+h1,h2,h3{font-family:var(--display);line-height:1.15;margin:0}
+h2{font-size:1.75rem;font-weight:800;letter-spacing:-.015em}
+h3{font-size:1.1rem;font-weight:700}
+p{margin:.25rem 0}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--acai);outline-offset:2px}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--head);color:#fff;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:0 0 22px 22px}
+header.top h1{font-size:1.2rem;font-weight:800;flex:1;display:flex;align-items:center;gap:8px}
+header.top h1 i{width:26px;height:26px;border-radius:8px;background:var(--manga);display:grid;place-items:center;color:var(--manga-ink);font-style:normal;font-size:.8rem;font-weight:800;transform:rotate(-8deg)}
+.sync{font-size:.78rem;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.14);padding:4px 10px;border-radius:999px}
+.sync:empty{display:none}
+.sync i{width:8px;height:8px;border-radius:50%;background:#ddd}
+.sync.ok i{background:#6CF0A4}.sync.err i{background:#FF9A8B}
+.head-btn{background:rgba(255,255,255,.14);border:0;color:inherit;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;cursor:pointer}
+.head-btn svg{width:22px;height:22px}
+
+main{max-width:640px;margin:0 auto;padding:22px 16px 120px}
+.intro{color:var(--muted);margin:.35rem 0 1.2rem}
+.banner{background:var(--manga-soft);color:var(--ink);border:1px solid var(--manga);border-radius:16px;padding:12px 14px;margin-bottom:18px;display:flex;gap:10px;align-items:center;justify-content:space-between;font-weight:600;font-size:.95rem}
+.banner button{background:var(--manga);color:var(--manga-ink);border:0;border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer;white-space:nowrap}
+
+/* Navegação inferior com botão central de venda */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-end;padding:6px 4px calc(8px + env(safe-area-inset-bottom,0px))}
+nav.tabs button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer}
+nav.tabs .ic{width:56px;height:30px;border-radius:15px;display:grid;place-items:center;transition:background .15s}
+nav.tabs svg{width:22px;height:22px}
+nav.tabs button[aria-current="page"]{color:var(--acai)}
+nav.tabs button[aria-current="page"] .ic{background:var(--acai-soft)}
+nav.tabs .fab .ic{width:56px;height:56px;border-radius:18px;background:var(--manga);color:var(--manga-ink);margin-top:-26px;box-shadow:0 6px 18px rgba(255,150,0,.4)}
+nav.tabs .fab[aria-current="page"] .ic{background:var(--manga);outline:3px solid var(--acai-soft)}
+nav.tabs .fab svg{width:28px;height:28px}
+
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field>span{font-size:.86rem;font-weight:700;color:var(--muted)}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+input,select,textarea{width:100%;background:var(--bg);border:1.5px solid transparent;border-radius:12px;padding:11px 13px;font-size:16px;min-height:48px;transition:border-color .15s,background .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--acai);background:var(--card);outline:none}
+textarea{min-height:90px;resize:vertical}
+textarea.code{font-family:ui-monospace,Menlo,monospace;font-size:13px;min-height:120px}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:32px}
+.prefix{position:relative}.prefix input{padding-left:42px}
+.prefix::before{content:"R$";position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700;pointer-events:none;z-index:1}
+
+.linhas{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+.linha{display:grid;grid-template-columns:1fr 44px;gap:8px;align-items:center;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.linha:last-child{border-bottom:0;padding-bottom:0}
+.linha>select{grid-column:1/-1}
+.qtd{position:relative}.qtd input{padding-right:84px}
+.qtd small{position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.82rem;font-weight:600;pointer-events:none}
+.linha-custo{grid-column:1/-1;font-size:.84rem;color:var(--muted);margin:-2px 0 0 2px}
+.icon-btn{width:44px;height:44px;border-radius:12px;border:0;background:var(--bg);color:var(--muted);font-size:1.3rem;line-height:1;cursor:pointer;display:grid;place-items:center}
+.icon-btn svg{width:20px;height:20px}
+
+.btn{border:0;background:var(--acai-soft);color:var(--acai);border-radius:14px;padding:12px 18px;font-weight:800;cursor:pointer;min-height:50px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-size:.98rem}
+.btn svg{width:20px;height:20px}
+.btn.primary{background:var(--acai);color:var(--acai-ink)}
+.btn.manga{background:var(--manga);color:var(--manga-ink)}
+.btn.whats{background:#1FAF5A;color:#fff}
+.btn.ghost{background:transparent;border:1.5px dashed var(--line);color:var(--acai)}
+.btn.danger{background:var(--neg-soft);color:var(--neg)}
+.btn.wide{width:100%}
+.btn.small{min-height:40px;padding:8px 12px;font-size:.9rem;border-radius:12px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.btns.stack{flex-direction:column}
+
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:0;background:var(--bg);border-radius:999px;padding:9px 15px;font-weight:800;cursor:pointer;font-size:.95rem;color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--acai);color:var(--acai-ink)}
+
+.panel{background:var(--card);border-radius:22px;padding:18px;margin-bottom:14px}
+.panel>h3{margin-bottom:12px}
+.hint{color:var(--muted);font-size:.93rem}
+
+.step{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.step b{width:28px;height:28px;border-radius:50%;background:var(--acai);color:var(--acai-ink);display:grid;place-items:center;font-size:.9rem;flex:none}
+.step h3{margin:0}
+
+/* Etiqueta de preço */
+.ticket{position:relative;background:var(--manga);color:var(--manga-ink);padding:20px 22px 20px 50px;margin:0 0 14px;clip-path:polygon(22px 0,100% 0,100% 100%,22px 100%,0 50%);border-radius:0 22px 22px 0}
+.ticket::before{content:"";position:absolute;left:20px;top:50%;width:12px;height:12px;border-radius:50%;background:var(--bg);transform:translateY(-50%)}
+.ticket::after{content:"";position:absolute;left:40px;top:14px;bottom:14px;border-left:2px dashed rgba(59,37,0,.3)}
+.ticket-label{font-weight:800;font-size:.95rem;display:block}
+.ticket-price{display:block;font-family:var(--display);font-weight:800;font-size:clamp(2rem,10vw,3.3rem);line-height:1.05;letter-spacing:-.02em;margin:2px 0 4px;font-variant-numeric:tabular-nums}
+.ticket-sub{font-size:.93rem;font-weight:700}
+
+dl.resumo{margin:0;display:flex;flex-direction:column}
+dl.resumo>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+dl.resumo>div:last-child{border-bottom:0}
+dl.resumo dt{color:var(--muted)}dl.resumo dd{margin:0;font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
+dl.resumo .total dt,dl.resumo .total dd{color:var(--ink);font-weight:800}
+
+details.compras{margin:12px 0 4px;background:var(--bg);border-radius:14px;padding:4px 14px}
+details.compras summary{cursor:pointer;font-weight:800;color:var(--acai);padding:10px 0}
+details.compras ul{margin:0 0 10px;padding-left:18px}
+details.compras li{margin:5px 0}
+
+.lucro-box{border-radius:22px;padding:18px 20px;margin-bottom:14px;background:var(--lucro);color:#fff}
+.lucro-box.neg{background:var(--neg)}
+.lucro-box strong{display:block;font-family:var(--display);font-size:2.6rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.lucro-box span{font-weight:700;opacity:.95}
+
+.list{display:flex;flex-direction:column;background:var(--card);border-radius:22px;overflow:hidden;margin-bottom:14px}
+.item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;width:100%;cursor:pointer}
+.item:last-child{border-bottom:0}
+.item:active{background:var(--bg)}
+.item b{display:block;font-weight:800}
+.item small{color:var(--muted);display:block}
+.item .val{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.warn{color:var(--neg);font-size:.84rem;font-weight:800}
+.pos{color:var(--lucro)}.negt{color:var(--neg)}
+.group-title{font-family:var(--display);font-weight:700;color:var(--muted);font-size:1rem;margin:22px 4px 10px}
+.st{display:inline-block;font-size:.74rem;font-weight:800;border-radius:999px;padding:2px 9px;margin-top:3px}
+.st.rascunho{background:var(--bg);color:var(--muted)}
+.st.enviado{background:var(--manga-soft);color:var(--manga-ink)}
+.st.aprovado{background:var(--lucro-soft);color:var(--lucro)}
+:root[data-theme="dark"] .st.enviado{color:var(--manga)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .st.enviado{color:var(--manga)}}
+
+/* Início */
+.hero{background:var(--acai);color:var(--acai-ink);border-radius:26px;padding:20px;margin-bottom:14px;position:relative;overflow:hidden}
+.hero span{font-weight:700;opacity:.9}
+.hero strong{display:block;font-family:var(--display);font-size:clamp(2.4rem,11vw,3.2rem);font-weight:800;line-height:1.05;margin:4px 0 12px;font-variant-numeric:tabular-nums}
+.hero .mini{display:flex;gap:18px;flex-wrap:wrap;font-size:.92rem}
+.hero .mini b{display:block;font-size:1.05rem}
+.hero::after{content:"";position:absolute;right:-56px;top:-64px;width:140px;height:140px;border-radius:50%;background:var(--manga);opacity:.9}
+.hero>*{position:relative;z-index:1}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.tile{border:0;border-radius:20px;padding:16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:10px;min-height:108px;color:var(--ink)}
+.tile .ti{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff}
+.tile .ti svg{width:22px;height:22px}
+.tile b{font-weight:800;line-height:1.25}
+.t1{background:var(--manga-soft)}.t1 .ti{background:var(--manga);color:var(--manga-ink)}
+.t2{background:var(--lucro-soft)}.t2 .ti{background:var(--lucro)}
+.t3{background:var(--acai-soft)}.t3 .ti{background:var(--acai);color:var(--acai-ink)}
+.t4{background:var(--urucum-soft)}.t4 .ti{background:var(--urucum)}
+.passos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.passos li{display:flex;gap:12px;align-items:center;background:var(--bg);border-radius:14px;padding:12px 14px}
+.passos li b{width:28px;height:28px;border-radius:50%;background:var(--card);display:grid;place-items:center;flex:none;font-size:.9rem}
+.passos li.ok b{background:var(--lucro);color:#fff}
+.passos li.ok span{text-decoration:line-through;color:var(--muted)}
+.passos li button{margin-left:auto}
+
+.seg{display:flex;background:var(--card);border-radius:16px;padding:4px;margin-bottom:16px}
+.seg button{flex:1;border:0;background:none;padding:10px;border-radius:12px;font-weight:800;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--acai);color:var(--acai-ink)}
+
+.mes{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px}
+.mes strong{font-family:var(--display);font-size:1.3rem}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border-radius:18px;padding:14px 16px}
+.kpi span{color:var(--muted);font-size:.85rem;font-weight:700}
+.kpi strong{display:block;font-family:var(--display);font-size:1.35rem;font-weight:800;font-variant-numeric:tabular-nums}
+.bars{display:flex;flex-direction:column;gap:14px}
+.bar-meta{display:flex;justify-content:space-between;gap:8px;font-size:.9rem;margin-bottom:5px}
+.bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--bg)}
+.bar i{display:block;height:100%}
+.bar .c{background:var(--acai);opacity:.35}.bar .l{background:var(--lucro)}
+.legend{display:flex;gap:14px;font-size:.82rem;color:var(--muted);margin-top:12px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+.empty{text-align:center;padding:30px 14px}
+.empty p{color:var(--muted);margin-bottom:14px}
+
+/* Orçamento do cliente */
+.qitem{background:var(--bg);border-radius:16px;padding:12px;margin-bottom:10px;display:grid;grid-template-columns:1fr 44px;gap:8px}
+.qitem input{background:var(--card)}
+.qitem .nome{grid-column:1}
+.qitem .dados{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px}
+.qitem .lt{grid-column:1/-1;display:flex;justify-content:space-between;font-weight:700;font-size:.92rem;color:var(--muted);padding:0 2px}
+.qitem .lt b{color:var(--ink)}
+.qitem .icon-btn{background:var(--card)}
+.mini-label{font-size:.74rem;font-weight:700;color:var(--muted);display:block;margin:0 0 3px 3px}
+.qtotal{display:flex;justify-content:space-between;align-items:center;background:var(--manga);color:var(--manga-ink);border-radius:18px;padding:16px 18px;margin:6px 0 12px}
+.qtotal span{font-weight:800}
+.qtotal strong{font-family:var(--display);font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums}
+.privado{border:2px dashed var(--acai);border-radius:16px;padding:12px 14px;margin-bottom:12px;font-size:.92rem}
+.privado p:first-child{font-weight:800;color:var(--acai);display:flex;gap:6px;align-items:center}
+.privado svg{width:16px;height:16px}
+
+dialog{border:0;border-radius:26px;padding:0;background:var(--card);color:var(--ink);width:min(580px,calc(100% - 20px));max-height:calc(100% - 40px);box-shadow:0 24px 70px rgba(40,10,60,.4)}
+dialog::backdrop{background:rgba(24,10,36,.6)}
+.dlg{display:flex;flex-direction:column;max-height:calc(100dvh - 40px)}
+.dlg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 18px 8px}
+.dlg-head h2{font-size:1.45rem}
+.dlg-body{padding:8px 18px 12px;overflow:auto}
+.dlg-foot{display:flex;gap:8px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.dlg-foot .btn{flex:1}
+.dlg-body section{padding:14px 0;border-bottom:1px solid var(--line)}
+.dlg-body section:last-child{border-bottom:0}
+.dlg-body section h3{margin-bottom:8px}
+.file-btn input{display:none}
+@media (max-width:600px){
+  dialog.full{width:100%;max-width:100%;height:100%;max-height:100%;margin:0;border-radius:0}
+  dialog.full .dlg{height:100dvh;max-height:100dvh;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  dialog.full .dlg-body{flex:1}
+}
+
+#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:20;max-width:90%;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion: reduce){#toast,nav.tabs .ic{transition:none}}
+
+@media print{
+  header.top,nav.tabs,.no-print,.banner{display:none!important}
+  main{padding:0;max-width:none}
+  body{background:#fff;color:#000}
+  .panel,.kpi,.list{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1><i>R$</i>Caderno de Custos</h1>
+  <span id="sync" class="sync"></span>
+  <button class="head-btn" data-act="ajustes" aria-label="Ajustes, dados do negócio e backup">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+<main id="main"></main>
+<nav class="tabs" id="tabs"></nav>
+<dialog id="dlg"></dialog>
+<dialog id="cfm"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ============ Utilidades ============ */
+const $ = (s, el = document) => el.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function num(v){
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v ?? '').trim().replace(/\s|R\$/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s); return isFinite(n) ? n : 0;
+}
+const r2 = n => Math.round(n * 100) / 100;
+const brl = n => (n || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const pct = n => ((n || 0) * 100).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%';
+const fq = n => (n || 0).toLocaleString('pt-BR', {maximumFractionDigits:2});
+const inStr = n => n === '' || n == null ? '' : String(r2(num(n))).replace('.', ',');
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const hoje = () => ymd(new Date());
+const dataCurta = s => { const [y,m,d] = (s || '').split('-'); return d ? `${d}/${m}` : ''; };
+const dataBR = s => { const [y,m,d] = (s || '').split('-'); return d ? `${d}/${m}/${y}` : ''; };
+const addDias = (s, n) => { const d = new Date((s || hoje()) + 'T12:00'); d.setDate(d.getDate() + (num(n) || 0)); return ymd(d); };
+const mesNome = ym => { const [y, m] = ym.split('-').map(Number); const s = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'}); return s[0].toUpperCase() + s.slice(1); };
+const clean = o => JSON.parse(JSON.stringify(o));
+function fmtTel(v){
+  let d = String(v || '').replace(/\D/g, '');
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  d = d.slice(0, 11);
+  if (!d) return '';
+  if (d.length <= 2) return '(' + d;
+  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+function roundNice(v){ if (v <= 0) return 0; const st = v < 2 ? .05 : v < 20 ? .5 : v < 100 ? 1 : 5; return r2(Math.ceil(v / st - 1e-9) * st); }
+
+const UNITS = { kg:{f:'g',m:1000,l:'kg'}, g:{f:'g',m:1,l:'g'}, L:{f:'ml',m:1000,l:'litro'}, ml:{f:'ml',m:1,l:'ml'}, un:{f:'un',m:1,l:'unidade'} };
+const FAM_UNITS = { g:['g','kg'], ml:['ml','L'], un:['un'] };
+function fmtBase(q, f){
+  if (f === 'g') return q >= 1000 ? fq(q/1000) + ' kg' : fq(q) + ' g';
+  if (f === 'ml') return q >= 1000 ? fq(q/1000) + ' L' : fq(q) + ' ml';
+  return fq(q) + ' un';
+}
+const CATEGORIAS = ['Salgados','Churrasco','Acompanhamentos','Bolos e doces','Outros'];
+
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+const scripts = {};
+function loadScript(src){ return scripts[src] ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { delete scripts[src]; rej(new Error('Sem conexão para carregar ' + src.split('/').pop())); }; document.head.appendChild(s); }); }
+
+/* ============ Armazenamento local ============ */
+const Local = {
+  db: null,
+  open(){ return new Promise(res => { try { const r = indexedDB.open('caderno-custos', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => res(); } catch(e){ res(); } }); },
+  get(k){ if (this.db) return new Promise(res => { try { const q = this.db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); } catch(e){ res(undefined); } });
+    try { return Promise.resolve(JSON.parse(localStorage.getItem('cc:' + k))); } catch(e){ return Promise.resolve(undefined); } },
+  set(k, v){ if (this.db) return new Promise(res => { try { const tx = this.db.transaction('kv','readwrite'); tx.objectStore('kv').put(clean(v), k); tx.oncomplete = res; tx.onerror = res; } catch(e){ res(); } });
+    try { localStorage.setItem('cc:' + k, JSON.stringify(v)); } catch(e){} return Promise.resolve(); }
+};
+
+const COLS = ['insumos','receitas','lancamentos','orcamentos','config'];
+let S = { insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, meta:{} };
+const persist = () => Local.set('state', S);
+function save(col, obj){ obj.atualizadoEm = new Date().toISOString(); S[col][obj.id] = obj; persist(); Cloud.put(col, obj); }
+function remove(col, id){ delete S[col][id]; persist(); Cloud.del(col, id); }
+function setMeta(k, v){ S.meta[k] = v; persist(); }
+const totalItens = () => ['insumos','receitas','lancamentos','orcamentos'].reduce((a, c) => a + Object.keys(S[c]).length, 0);
+const negocio = () => ({nome:'', telefone:'', cidade:'', pix:'', obsPadrao:'', ...(S.config.negocio || {}), id:'negocio'});
+
+/* ============ Nuvem (Firebase) ============ */
+const FB = 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/';
+const JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+const Cloud = {
+  on:false, user:null, db:null, unsubs:[], status:'', erro:'',
+  cfg(){ try { return JSON.parse(localStorage.getItem('cc:fbconfig') || 'null'); } catch(e){ return null; } },
+  async init(){
+    const cfg = this.cfg(); if (!cfg) return;
+    this.status = 'conectando'; renderSync();
+    try {
+      await loadScript(FB + 'firebase-app-compat.js');
+      await loadScript(FB + 'firebase-auth-compat.js');
+      await loadScript(FB + 'firebase-firestore-compat.js');
+      firebase.initializeApp(cfg);
+      this.db = firebase.firestore();
+      try { await this.db.enablePersistence({synchronizeTabs:true}); } catch(e){}
+      this.on = true;
+      firebase.auth().getRedirectResult().catch(() => {});
+      firebase.auth().onAuthStateChanged(u => { this.user = u; if (u) this.start(); else { this.stop(); this.status = 'sem login'; } render(); });
+    } catch(e){ this.status = 'erro'; this.erro = e.message; render(); }
+  },
+  ref(col){ return this.db.collection('users').doc(this.user.uid).collection(col); },
+  async start(){
+    this.stop(); this.status = 'sincronizando'; renderSync();
+    for (const col of COLS){
+      const ref = this.ref(col);
+      try {
+        const snap = await ref.get(); const local = Object.values(S[col]);
+        if (snap.empty && local.length){
+          for (let i = 0; i < local.length; i += 400){ const b = this.db.batch(); local.slice(i, i+400).forEach(o => b.set(ref.doc(o.id), clean(o))); b.commit().catch(() => {}); }
+        }
+      } catch(e){}
+      this.unsubs.push(ref.onSnapshot(snap => {
+        const m = {}; snap.forEach(d => m[d.id] = d.data()); S[col] = m; persist();
+        this.status = snap.metadata.fromCache ? 'offline' : 'sincronizada'; render();
+      }, err => { this.status = 'erro'; this.erro = err.message; render(); }));
+    }
+  },
+  stop(){ this.unsubs.forEach(f => f()); this.unsubs = []; },
+  put(col, o){ if (this.user) this.ref(col).doc(o.id).set(clean(o)).catch(() => {}); },
+  del(col, id){ if (this.user) this.ref(col).doc(id).delete().catch(() => {}); },
+  async login(){ const p = new firebase.auth.GoogleAuthProvider();
+    try { await firebase.auth().signInWithPopup(p); } catch(e){ if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') firebase.auth().signInWithRedirect(p); } },
+  logout(){ firebase.auth().signOut(); }
+};
+
+/* ============ Cálculos ============ */
+function custoBaseInsumo(i){ const u = UNITS[i.unidade]; const q = num(i.qtd) * (u ? u.m : 1); return q > 0 ? num(i.preco) / q : 0; }
+function custoItem(it){
+  const ins = S.insumos[it.insumoId]; if (!ins) return {custo:0, falta:true};
+  const fi = UNITS[ins.unidade]?.f, u = UNITS[it.unidade] || UNITS[ins.unidade];
+  if (!u || u.f !== fi || custoBaseInsumo(ins) === 0) return {custo:0, falta:true, ins};
+  const base = num(it.qtd) * u.m;
+  return {custo: base * custoBaseInsumo(ins), base, ins};
+}
+function custoReceita(r){
+  let total = 0, falta = 0;
+  (r.itens || []).forEach(it => { const c = custoItem(it); total += c.custo; if (c.falta) falta++; });
+  return {total, unit: total / (num(r.rendimento) || 1), falta};
+}
+function calcLinhas(linhas){
+  let custo = 0; const detalhes = [], compras = {};
+  linhas.forEach(l => {
+    const r = S.receitas[l.receitaId]; const q = num(l.qtd); if (!r || q <= 0) return;
+    const f = q / (num(r.rendimento) || 1); const cr = custoReceita(r);
+    custo += cr.total * f; detalhes.push({id:r.id, nome:r.nome, qtd:q, unid:r.rendUnid, custo:cr.total * f, falta:cr.falta});
+    (r.itens || []).forEach(it => { const c = custoItem(it); if (c.base) compras[it.insumoId] = (compras[it.insumoId] || 0) + c.base * f; });
+  });
+  return {custo, detalhes, compras};
+}
+function resumoMes(ym){
+  const lista = Object.values(S.lancamentos).filter(l => (l.data || '').startsWith(ym)).sort((a,b) => a.data.localeCompare(b.data));
+  let fat = 0, custo = 0; lista.forEach(l => { fat += num(l.faturamento); custo += num(l.custoItens) + num(l.extras); });
+  return {lista, fat, custo, lucro: fat - custo, mg: fat ? (fat - custo) / fat : 0};
+}
+const temaAtual = () => { try { return localStorage.getItem('cc:tema') || 'dark'; } catch(e){ return 'dark'; } };
+function aplicarTema(t){
+  try { localStorage.setItem('cc:tema', t); } catch(e){}
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  const escuro = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelector('meta[name="theme-color"]').content = escuro ? '#2A0D45' : '#6A1B9A';
+}
+const margemOrc = () => Math.min(Math.max(num(ORC.margem) / 100, 0), .95);
+
+/* ============ Estado dos formulários ============ */
+let TAB = 'ini', CAD = 'rec';
+let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20' };
+const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'' });
+let LAN = novoLan();
+let REL = hoje().slice(0, 7);
+let RF = null, INS = null, Q = null, NEG = null, BUSCA = '';
+const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG };
+
+/* ============ Ícones ============ */
+const ic = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const I = {
+  ini: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  orc: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  lan: '<path d="M12 5v14M5 12h14"/>',
+  rel: '<path d="M3 21h18M6 17V11M11 17V6M16 17v-4M21 17V9"/>',
+  cad: '<path d="M5 4a1 1 0 0 1 1-1h13v15H6a2 2 0 0 0-1 .3V4z"/><path d="M5 20a2 2 0 0 1 2-2h12v3H7a2 2 0 0 1-2-1z"/>',
+  ins: '<path d="M3 9h18l-2 11H5L3 9z"/><path d="M8 9l4-6 4 6"/>',
+  doc: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  whats: '<path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+};
+const TABS = [['ini','Início',I.ini],['orc','Orçar',I.orc],['lan','Vender',I.lan],['rel','Relatório',I.rel],['cad','Cadastros',I.cad]];
+
+/* ============ Render ============ */
+let pendente = false;
+function render(){
+  renderSync();
+  const a = document.activeElement;
+  if (a && ($('#main').contains(a) || $('#dlg').contains(a)) && /INPUT|TEXTAREA/.test(a.tagName)){ pendente = true; return; }
+  pendente = false;
+  $('#tabs').innerHTML = TABS.map(([id, nome, p]) => `<button data-act="tab" data-id="${id}" class="${id === 'lan' ? 'fab' : ''}" ${TAB === id ? 'aria-current="page"' : ''}><span class="ic">${ic(p, id === 'lan' ? 2.6 : 2)}</span><span>${nome}</span></button>`).join('');
+  $('#main').innerHTML = banner() + VIEWS[TAB]();
+  if ($('#dlg').open && $('#dlg').dataset.kind === 'ajustes') openAjustes();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (pendente) render(); }, 60));
+
+function renderSync(){
+  const el = $('#sync'); if (!el) return;
+  if (!Cloud.cfg()){ el.className = 'sync'; el.innerHTML = ''; return; }
+  const map = { 'sincronizada':['ok','Na nuvem'], 'offline':['','Offline'], 'sincronizando':['','Sincronizando'], 'conectando':['','Conectando'], 'sem login':['err','Sem login'], 'erro':['err','Erro na nuvem'] };
+  const [cls, txt] = map[Cloud.status] || ['', ''];
+  el.className = 'sync ' + cls; el.innerHTML = txt ? `<i></i>${txt}` : '';
+}
+function banner(){
+  if (!totalItens() || Cloud.user) return '';
+  const u = S.meta.ultimoBackup; const dias = u ? (Date.now() - new Date(u)) / 864e5 : Infinity;
+  if (dias < 30) return '';
+  return `<div class="banner no-print"><span>${u ? 'Faz mais de 30 dias do último backup.' : 'Guarde uma cópia dos seus dados.'}</span><button data-act="exportar">Salvar backup</button></div>`;
+}
+
+const receitaOpts = sel => '<option value="">Escolha a receita</option>' + Object.values(S.receitas).sort((a,b) => a.nome.localeCompare(b.nome)).map(r => `<option value="${r.id}" ${r.id === sel ? 'selected' : ''}>${esc(r.nome)}</option>`).join('');
+function linhasHTML(f, linhas){
+  return `<div class="linhas">${linhas.map((l, i) => { const r = S.receitas[l.receitaId];
+    return `<div class="linha">
+      <select data-bind="${f}.linhas.${i}.receitaId" data-rerender="${f}" aria-label="Receita">${receitaOpts(l.receitaId)}</select>
+      <div class="qtd"><input inputmode="decimal" data-bind="${f}.linhas.${i}.qtd" value="${esc(l.qtd)}" placeholder="Quantidade" aria-label="Quantidade"><small>${esc(r ? r.rendUnid : '')}</small></div>
+      <button class="icon-btn" data-act="rmLinha" data-f="${f}" data-i="${i}" aria-label="Remover item">${ic(I.x)}</button>
+    </div>`; }).join('')}</div>
+    <button class="btn ghost wide" data-act="addLinha" data-f="${f}">Adicionar outro item</button>`;
+}
+function vazioReceitas(){
+  const semIns = !Object.keys(S.insumos).length;
+  return `<div class="panel empty"><h3>${semIns ? 'Comece pelos insumos' : 'Agora cadastre uma receita'}</h3>
+    <p>${semIns ? 'Insumos são o que você compra: trigo, carne, carvão, embalagem. Depois é só montar as receitas.' : 'Com uma receita cadastrada, o orçamento sai na hora.'}</p>
+    <div class="btns" style="justify-content:center"><button class="btn primary" data-act="${semIns ? 'novoInsumo' : 'novaReceita'}">${semIns ? 'Cadastrar insumo' : 'Cadastrar receita'}</button>
+    ${totalItens() ? '' : '<button class="btn" data-act="exemplo">Ver com dados de exemplo</button>'}</div></div>`;
+}
+const stTxt = {rascunho:'Rascunho', enviado:'Enviado', aprovado:'Virou venda'};
+const orcItem = o => `<button class="item" data-act="abrirOrc" data-id="${o.id}"><span><b>${esc(o.cliente || 'Sem nome')}</b><small>Nº ${o.numero} de ${dataCurta(o.data)}${o.dataEvento ? ', evento ' + dataCurta(o.dataEvento) : ''}</small><span class="st ${o.status}">${stTxt[o.status] || ''}</span></span><span class="val">${brl(o.total)}</span></button>`;
+const orcsOrdenados = () => Object.values(S.orcamentos).sort((a,b) => (b.numero || 0) - (a.numero || 0));
+
+const VIEWS = {
+  ini(){
+    const r = resumoMes(hoje().slice(0, 7)), neg = negocio();
+    const temIns = Object.keys(S.insumos).length, temRec = Object.keys(S.receitas).length, temOrc = Object.keys(S.orcamentos).length + Object.keys(S.lancamentos).length;
+    const orcs = orcsOrdenados().slice(0, 4);
+    return `<h2>${neg.nome ? 'Olá, ' + esc(neg.nome) : 'Olá!'}</h2><p class="intro">O que vamos fazer hoje?</p>
+    ${temIns && temRec ? `<div class="hero"><span>Seu lucro em ${mesNome(hoje().slice(0, 7)).split(' ')[0].toLowerCase()}</span><strong>${brl(r.lucro)}</strong>
+      <div class="mini"><span>Entrou<b>${brl(r.fat)}</b></span><span>Margem<b>${pct(r.mg)}</b></span><span>Eventos<b>${r.lista.length}</b></span></div></div>` : `
+    <div class="panel"><h3>Primeiros passos</h3><ol class="passos">
+      <li class="${temIns ? 'ok' : ''}"><b>${temIns ? '✓' : '1'}</b><span>Cadastre o que você compra</span>${temIns ? '' : '<button class="btn small primary" data-act="novoInsumo">Fazer</button>'}</li>
+      <li class="${temRec ? 'ok' : ''}"><b>${temRec ? '✓' : '2'}</b><span>Monte as receitas</span>${!temIns || temRec ? '' : '<button class="btn small primary" data-act="novaReceita">Fazer</button>'}</li>
+      <li class="${temOrc ? 'ok' : ''}"><b>${temOrc ? '✓' : '3'}</b><span>Faça o primeiro orçamento</span></li>
+    </ol>${totalItens() ? '' : '<div class="btns"><button class="btn wide" data-act="exemplo">Ver com dados de exemplo</button></div>'}</div>`}
+    <div class="tiles">
+      <button class="tile t1" data-act="tab" data-id="orc"><span class="ti">${ic(I.orc)}</span><b>Novo orçamento</b></button>
+      <button class="tile t2" data-act="tab" data-id="lan"><span class="ti">${ic(I.lan, 2.6)}</span><b>Lançar venda</b></button>
+      <button class="tile t3" data-act="tab" data-id="rel"><span class="ti">${ic(I.rel)}</span><b>Ver relatório</b></button>
+      <button class="tile t4" data-act="irInsumos"><span class="ti">${ic(I.ins)}</span><b>Atualizar preço de insumo</b></button>
+    </div>
+    ${!neg.nome ? `<div class="banner" style="margin-top:12px"><span>Coloque o nome do seu negócio para sair nos orçamentos.</span><button data-act="ajustes">Colocar</button></div>` : ''}
+    ${orcs.length ? `<p class="group-title">Orçamentos recentes</p><div class="list">${orcs.map(orcItem).join('')}</div>` : ''}`;
+  },
+  orc(){
+    const head = `<h2>Orçar</h2><p class="intro">Monte o pedido, veja quanto cobrar e mande para o cliente.</p>`;
+    if (!Object.keys(S.receitas).length) return head + vazioReceitas();
+    const ms = ['10','15','20','25','30','40'], orcs = orcsOrdenados();
+    return head + `
+    <div class="panel"><div class="step"><b>1</b><h3>O que o cliente quer</h3></div>${linhasHTML('orc', ORC.linhas)}</div>
+    <div class="panel"><div class="step"><b>2</b><h3>Custos extras e lucro</h3></div>
+      <label class="field"><span>Gás, entrega, ajudante, embalagem avulsa</span><div class="prefix"><input inputmode="decimal" data-bind="orc.extras" value="${esc(ORC.extras)}" placeholder="0,00"></div></label>
+      <div class="field"><span>Quanto você quer ganhar sobre o valor cobrado</span>
+        <div class="chips">${ms.map(m => `<button class="chip" data-act="margem" data-v="${m}" aria-pressed="${ORC.margem === m}">${m}%</button>`).join('')}</div></div>
+      <label class="field" style="margin-bottom:0"><span>Ou digite outra porcentagem</span><input inputmode="decimal" data-bind="orc.margem" value="${esc(ORC.margem)}"></label>
+    </div>
+    <div class="step" style="margin:20px 2px 12px"><b>3</b><h3>Preço</h3></div>
+    <div id="orc-result">${orcResult()}</div>
+    ${orcs.length ? `<p class="group-title">Orçamentos salvos</p><div class="list">${orcs.map(orcItem).join('')}</div>` : ''}`;
+  },
+  lan(){
+    const head = `<h2>Lançar venda</h2><p class="intro">Registre o que entrou e veja o lucro na hora. O custo fica gravado com os preços de hoje.</p>`;
+    if (!Object.keys(S.receitas).length) return head + vazioReceitas();
+    const ult = Object.values(S.lancamentos).sort((a,b) => b.data.localeCompare(a.data)).slice(0, 5);
+    return head + `
+    <div class="panel">
+      <div class="row"><label class="field"><span>Data</span><input type="date" data-bind="lan.data" value="${esc(LAN.data)}"></label>
+      <label class="field"><span>Nome</span><input data-bind="lan.descricao" value="${esc(LAN.descricao)}" placeholder="Churrasco de sexta"></label></div>
+      <div class="field" style="margin-bottom:8px"><span>O que foi feito</span></div>${linhasHTML('lan', LAN.linhas)}
+    </div>
+    <div class="panel">
+      <div class="row"><label class="field"><span>Custos extras</span><div class="prefix"><input inputmode="decimal" data-bind="lan.extras" value="${esc(LAN.extras)}" placeholder="0,00"></div></label>
+      <label class="field"><span>Quais</span><input data-bind="lan.extrasDesc" value="${esc(LAN.extrasDesc)}" placeholder="Gás, ajudante"></label></div>
+      <label class="field" style="margin-bottom:0"><span>Quanto entrou</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+    </div>
+    <div id="lan-result">${lanResult()}</div>
+    <button class="btn primary wide" data-act="salvarLan">Salvar lançamento</button>
+    ${ult.length ? `<p class="group-title">Últimos lançamentos</p><div class="list">${ult.map(lanItem).join('')}</div>` : ''}`;
+  },
+  rel(){
+    const {lista, fat, custo, lucro, mg} = resumoMes(REL);
+    const max = Math.max(1, ...lista.map(l => Math.max(num(l.faturamento), num(l.custoItens) + num(l.extras))));
+    return `<h2>Relatório do mês</h2><p class="intro no-print">Tudo o que entrou, o que custou e quanto sobrou.</p>
+    <div class="mes"><button class="icon-btn no-print" data-act="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${mesNome(REL)}</strong><button class="icon-btn no-print" data-act="mes" data-d="1" aria-label="Próximo mês">›</button></div>
+    ${!lista.length ? `<div class="panel empty"><h3>Nenhum lançamento neste mês</h3><p>Depois de cada evento, lance quanto entrou para ver o lucro aqui.</p><button class="btn primary" data-act="tab" data-id="lan">Lançar venda</button></div>` : `
+    <div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>Você ganhou</span><strong>${brl(lucro)}</strong><span>${pct(mg)} do que entrou</span></div>
+    <div class="kpis">
+      <div class="kpi"><span>Entrou</span><strong>${brl(fat)}</strong></div>
+      <div class="kpi"><span>Custos</span><strong>${brl(custo)}</strong></div>
+      <div class="kpi"><span>Eventos</span><strong>${lista.length}</strong></div>
+      <div class="kpi"><span>Lucro médio</span><strong>${brl(lucro / lista.length)}</strong></div>
+    </div>
+    <div class="panel"><h3>Evento por evento</h3><div class="bars">${lista.map(l => { const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
+      return `<div><div class="bar-meta"><span>${dataCurta(l.data)} ${esc(l.descricao)}</span><span class="${lu < 0 ? 'negt' : 'pos'}"><b>${brl(lu)}</b> ${f ? '(' + pct(lu / f) + ')' : ''}</span></div>
+      <div class="bar"><i class="c" style="width:${Math.min(c, f || c) / max * 100}%"></i><i class="l" style="width:${Math.max(lu, 0) / max * 100}%"></i></div></div>`; }).join('')}</div>
+      <div class="legend"><span><i style="background:var(--acai);opacity:.35"></i>Custo</span><span><i style="background:var(--lucro)"></i>Lucro</span></div></div>
+    <p class="group-title">Lançamentos</p><div class="list">${lista.map(lanItem).join('')}</div>
+    <div class="btns no-print"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>`}`;
+  },
+  cad(){
+    return `<h2>Cadastros</h2><p class="intro">${CAD === 'rec' ? 'Cada receita diz quanto de cada insumo você usa e quanto ela rende.' : 'Quando um preço mudar, atualize aqui e todas as receitas se recalculam.'}</p>
+    <div class="seg" role="group" aria-label="Tipo de cadastro"><button data-act="cad" data-v="rec" aria-pressed="${CAD === 'rec'}">Receitas</button><button data-act="cad" data-v="ins" aria-pressed="${CAD === 'ins'}">Insumos</button></div>
+    ${CAD === 'rec' ? recView() : insView()}`;
+  }
+};
+function recView(){
+  const lista = Object.values(S.receitas).sort((a,b) => a.nome.localeCompare(b.nome));
+  if (!lista.length) return vazioReceitas();
+  const grupos = {}; lista.forEach(r => (grupos[r.categoria || 'Outros'] ||= []).push(r));
+  return `<button class="btn primary wide" data-act="novaReceita">Nova receita</button>
+  ${CATEGORIAS.filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
+    return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
+    <span class="val">${brl(cr.total)}<small>${brl(cr.unit)} cada</small></span></button>`; }).join('')}</div>`).join('')}`;
+}
+function insView(){
+  const todos = Object.values(S.insumos).sort((a,b) => a.nome.localeCompare(b.nome));
+  if (!todos.length) return vazioReceitas();
+  const b = BUSCA.trim().toLowerCase(); const lista = b ? todos.filter(i => i.nome.toLowerCase().includes(b)) : todos;
+  return `<input type="search" data-bind="busca" value="${esc(BUSCA)}" placeholder="Buscar insumo" aria-label="Buscar insumo" style="margin-bottom:10px;background:var(--card)">
+  <button class="btn primary wide" data-act="novoInsumo" style="margin-bottom:14px">Novo insumo</button>
+  <div class="list" id="ins-list">${insLista(lista)}</div>`;
+}
+const insLista = lista => lista.length ? lista.map(i => { const u = UNITS[i.unidade]; const cb = custoBaseInsumo(i);
+  const ref = u.f === 'g' ? brl(cb * 1000) + '/kg' : u.f === 'ml' ? brl(cb * 1000) + '/litro' : brl(cb) + '/un';
+  return `<button class="item" data-act="editInsumo" data-id="${i.id}"><span><b>${esc(i.nome)}</b><small>${brl(num(i.preco))} a embalagem de ${fq(num(i.qtd))} ${u.l}${num(i.qtd) > 1 && u.f === 'un' ? 's' : ''}</small></span><span class="val">${ref}</span></button>`; }).join('')
+  : '<p class="hint" style="padding:14px 18px">Nenhum insumo com esse nome.</p>';
+function lanItem(l){
+  const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
+  return `<button class="item" data-act="verLan" data-id="${l.id}"><span><b>${esc(l.descricao)}</b><small>${dataCurta(l.data)}: entrou ${brl(f)}</small></span><span class="val ${lu < 0 ? 'negt' : 'pos'}">${brl(lu)}<small>${f ? pct(lu / f) : ''}</small></span></button>`;
+}
+
+function orcResult(){
+  const c = calcLinhas(ORC.linhas);
+  if (!c.detalhes.length) return '<div class="panel"><p class="hint">Escolha uma receita e a quantidade para ver o preço.</p></div>';
+  const extras = num(ORC.extras), custo = c.custo + extras, m = margemOrc();
+  const preco = custo / (1 - m), lucro = preco - custo;
+  const compras = Object.entries(c.compras).map(([id, q]) => { const i = S.insumos[id]; if (!i) return ''; const u = UNITS[i.unidade]; const emb = num(i.qtd) * u.m; const n = emb ? Math.ceil(q / emb - 1e-9) : 0;
+    return `<li><b>${esc(i.nome)}</b>: ${fmtBase(q, u.f)}${emb ? ` (${n} embalage${n > 1 ? 'ns' : 'm'} de ${fq(num(i.qtd))} ${i.unidade})` : ''}</li>`; }).join('');
+  const falta = c.detalhes.some(d => d.falta);
+  return `<div class="ticket"><span class="ticket-label">Cobre</span><strong class="ticket-price">${brl(preco)}</strong><span class="ticket-sub">e você ganha ${brl(lucro)}, que são ${pct(m)} do valor</span></div>
+  ${falta ? '<p class="warn" style="margin-bottom:10px">Alguma receita tem ingrediente sem preço, então o custo pode estar menor do que é.</p>' : ''}
+  <div class="btns stack" style="margin:0 0 14px"><button class="btn primary wide" data-act="orcCliente">${ic(I.doc)}Fazer orçamento para o cliente</button>
+  <button class="btn wide" data-act="orcParaLan">Lançar direto como venda</button></div>
+  <div class="panel"><h3>Custos (só você vê)</h3><dl class="resumo">
+    ${c.detalhes.map(d => `<div><dt>${esc(d.nome)}, ${fq(d.qtd)} ${esc(d.unid)}</dt><dd>${brl(d.custo)}</dd></div>`).join('')}
+    ${extras ? `<div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>` : ''}
+    <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div>
+  </dl>
+  <details class="compras"><summary>Lista de compras</summary><ul>${compras}</ul></details></div>`;
+}
+function lanResult(){
+  const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras, fat = num(LAN.recebido);
+  if (!fat && !c.detalhes.length) return '';
+  const lucro = fat - custo, m = fat ? lucro / fat : 0;
+  return `<div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>${lucro < 0 ? 'Prejuízo' : 'Seu lucro'}</span><strong>${brl(lucro)}</strong><span>${fat ? pct(m) + ' do que entrou' : 'Informe quanto entrou'}</span></div>
+  <div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
+  <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div><div><dt>Entrou</dt><dd>${brl(fat)}</dd></div></dl></div>`;
+}
+
+/* ============ Diálogos ============ */
+const dlg = () => $('#dlg');
+function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; if (!d.open) d.showModal(); }
+function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = null; }
+dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
+function askConfirm(msg, ok = 'Confirmar'){
+  return new Promise(res => { const c = $('#cfm');
+    c.innerHTML = `<div class="dlg"><div class="dlg-body" style="padding-top:22px"><p style="font-weight:700;font-size:1.05rem">${esc(msg)}</p></div><div class="dlg-foot"><button class="btn" value="n">Cancelar</button><button class="btn primary" value="s">${esc(ok)}</button></div></div>`;
+    c.querySelectorAll('button').forEach(b => b.onclick = () => { c.close(); res(b.value === 's'); });
+    c.showModal(); });
+}
+const dlgHead = t => `<div class="dlg-head"><h2>${t}</h2><button class="icon-btn" data-act="fechar" aria-label="Fechar">${ic(I.x)}</button></div>`;
+
+function openInsumo(id){
+  INS = id ? {...S.insumos[id]} : {id:'', nome:'', preco:'', qtd:'1', unidade:'kg'};
+  INS.preco = inStr(INS.preco); INS.qtd = inStr(INS.qtd);
+  openDlg('ins', `<div class="dlg">${dlgHead(id ? 'Editar insumo' : 'Novo insumo')}
+  <div class="dlg-body">
+    <label class="field"><span>Nome</span><input data-bind="ins.nome" value="${esc(INS.nome)}" placeholder="Trigo"></label>
+    <label class="field"><span>Preço da embalagem fechada</span><div class="prefix"><input inputmode="decimal" data-bind="ins.preco" value="${esc(INS.preco)}" placeholder="0,00"></div></label>
+    <div class="row"><label class="field"><span>Tamanho da embalagem</span><input inputmode="decimal" data-bind="ins.qtd" value="${esc(INS.qtd)}"></label>
+    <label class="field"><span>Unidade</span><select data-bind="ins.unidade">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${INS.unidade === k ? 'selected' : ''}>${u.l}</option>`).join('')}</select></label></div>
+    <p class="hint" id="ins-prev">${insPrev()}</p>
+  </div>
+  <div class="dlg-foot">${id ? `<button class="btn danger" data-act="delInsumo">Excluir</button>` : ''}<button class="btn primary" data-act="salvarInsumo">Salvar</button></div></div>`);
+}
+function insPrev(){ const u = UNITS[INS.unidade]; const cb = custoBaseInsumo(INS); if (!cb) return 'Informe o preço e o tamanho da embalagem.';
+  return u.f === 'g' ? `Sai ${brl(cb * 1000)} o quilo, ou ${brl(cb * 100)} a cada 100 g.` : u.f === 'ml' ? `Sai ${brl(cb * 1000)} o litro, ou ${brl(cb * 100)} a cada 100 ml.` : `Sai ${brl(cb)} cada unidade.`; }
+
+function openReceita(id){
+  RF = id ? clean(S.receitas[id]) : {id:'', nome:'', categoria:'Salgados', rendimento:'', rendUnid:'unidades', itens:[{insumoId:'', qtd:'', unidade:'g'}]};
+  RF.rendimento = inStr(RF.rendimento); RF.itens.forEach(it => it.qtd = inStr(it.qtd));
+  renderRf();
+}
+function renderRf(){
+  const ins = Object.values(S.insumos).sort((a,b) => a.nome.localeCompare(b.nome));
+  openDlg('rf', `<div class="dlg">${dlgHead(RF.id ? 'Editar receita' : 'Nova receita')}
+  <div class="dlg-body">
+    <label class="field"><span>Nome</span><input data-bind="rf.nome" value="${esc(RF.nome)}" placeholder="Coxinha de frango"></label>
+    <label class="field"><span>Categoria</span><select data-bind="rf.categoria">${CATEGORIAS.map(c => `<option ${RF.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    <div class="row"><label class="field"><span>Rende</span><input inputmode="decimal" data-bind="rf.rendimento" value="${esc(RF.rendimento)}" placeholder="100"></label>
+    <label class="field"><span>Em</span><input data-bind="rf.rendUnid" value="${esc(RF.rendUnid)}" placeholder="salgados, pessoas"></label></div>
+    <div class="field" style="margin-bottom:8px"><span>Ingredientes desta receita</span></div>
+    ${!ins.length ? '<p class="warn">Cadastre os insumos antes de montar a receita.</p>' : `<div class="linhas">${RF.itens.map((it, i) => { const sel = S.insumos[it.insumoId]; const fam = sel ? UNITS[sel.unidade].f : 'g';
+      return `<div class="linha"><select data-bind="rf.itens.${i}.insumoId" data-rerender="rf" aria-label="Insumo"><option value="">Escolha o insumo</option>${ins.map(x => `<option value="${x.id}" ${x.id === it.insumoId ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select>
+      <div class="row"><input inputmode="decimal" data-bind="rf.itens.${i}.qtd" value="${esc(it.qtd)}" placeholder="Quantidade" aria-label="Quantidade">
+      <select data-bind="rf.itens.${i}.unidade" data-rerender="rf" aria-label="Unidade">${FAM_UNITS[fam].map(u => `<option value="${u}" ${it.unidade === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>
+      <button class="icon-btn" data-act="rmItem" data-i="${i}" aria-label="Remover ingrediente">${ic(I.x)}</button>
+      <p class="linha-custo" id="rf-c-${i}">${rfItemCusto(it)}</p></div>`; }).join('')}</div>
+    <button class="btn ghost wide" data-act="addItem">Adicionar ingrediente</button>`}
+    <div class="panel" style="margin:14px 0 4px;background:var(--bg)"><dl class="resumo" id="rf-total">${rfTotal()}</dl></div>
+  </div>
+  <div class="dlg-foot">${RF.id ? '<button class="btn danger" data-act="delReceita">Excluir</button>' : ''}<button class="btn primary" data-act="salvarReceita">Salvar</button></div></div>`);
+}
+function rfItemCusto(it){ if (!it.insumoId) return ''; const c = custoItem({...it, qtd:num(it.qtd)}); return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
+function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))});
+  return `<div class="total"><dt>Custo da receita</dt><dd>${brl(cr.total)}</dd></div><div><dt>Custo de cada um (${esc(RF.rendUnid || 'unidades')})</dt><dd>${num(RF.rendimento) ? brl(cr.unit) : 'informe o rendimento'}</dd></div>`; }
+
+/* ============ Orçamento para o cliente ============ */
+const proxNumero = () => Object.values(S.orcamentos).reduce((m, o) => Math.max(m, num(o.numero)), 0) + 1;
+function novoOrcCliente(){
+  const c = calcLinhas(ORC.linhas); if (!c.detalhes.length) return toast('Escolha uma receita e a quantidade');
+  const E = num(ORC.extras), m = margemOrc();
+  const itens = c.detalhes.map(d => { const share = c.custo ? d.custo / c.custo : 1 / c.detalhes.length; const preco = (d.custo + E * share) / (1 - m);
+    return {receitaId:d.id, nome:d.nome, qtd:inStr(d.qtd), unid:d.unid, preco:inStr(preco / d.qtd), custoUnit:d.custo / d.qtd}; });
+  const n = negocio();
+  Q = {id:'', numero:proxNumero(), data:hoje(), cliente:'', telefone:'', dataEvento:'', validade:'7', obs:n.obsPadrao || '', itens, extras:E, status:'rascunho'};
+  renderQ();
+}
+function abrirOrc(id){ const o = clean(S.orcamentos[id]); o.itens.forEach(i => { i.qtd = inStr(i.qtd); i.preco = inStr(i.preco); }); o.validade = String(o.validade ?? 7); Q = o; renderQ(); }
+function qCalc(){
+  let total = 0, custo = num(Q.extras);
+  Q.itens.forEach(i => { total += num(i.qtd) * num(i.preco); custo += num(i.qtd) * (i.custoUnit || 0); });
+  const semCusto = Q.itens.some(i => i.receitaId && !i.custoUnit);
+  return {total: r2(total), custo, lucro: total - custo, mg: total ? (total - custo) / total : 0, semCusto};
+}
+function renderQ(){
+  const c = qCalc();
+  openDlg('q', `<div class="dlg">${dlgHead('Orçamento Nº ' + Q.numero)}
+  <div class="dlg-body">
+    <p class="hint" style="margin-bottom:12px">O cliente vê só os itens, as quantidades e os valores. Os custos ficam com você.</p>
+    <label class="field"><span>Nome do cliente</span><input data-bind="q.cliente" value="${esc(Q.cliente)}" placeholder="Dona Maria"></label>
+    <div class="row"><label class="field"><span>WhatsApp do cliente</span><input type="tel" inputmode="numeric" autocomplete="tel-national" data-bind="q.telefone" value="${esc(fmtTel(Q.telefone))}" placeholder="(92) 99999-9999"></label>
+    <label class="field"><span>Data do evento</span><input type="date" data-bind="q.dataEvento" value="${esc(Q.dataEvento)}"></label></div>
+    <div class="field" style="margin:6px 0 8px"><span>Itens</span></div>
+    ${Q.itens.map((it, i) => `<div class="qitem">
+      <input class="nome" data-bind="q.itens.${i}.nome" value="${esc(it.nome)}" aria-label="Nome do item">
+      <button class="icon-btn" data-act="qRm" data-i="${i}" aria-label="Remover item">${ic(I.trash)}</button>
+      <div class="dados">
+        <label><span class="mini-label">Quantidade</span><input inputmode="decimal" data-bind="q.itens.${i}.qtd" value="${esc(it.qtd)}"></label>
+        <label><span class="mini-label">Unidade</span><input data-bind="q.itens.${i}.unid" value="${esc(it.unid)}" placeholder="un"></label>
+        <label><span class="mini-label">Valor de cada</span><div class="prefix"><input inputmode="decimal" data-bind="q.itens.${i}.preco" value="${esc(it.preco)}"></div></label>
+      </div>
+      <div class="lt"><span>Total do item</span><b id="q-lt-${i}">${brl(num(it.qtd) * num(it.preco))}</b></div>
+    </div>`).join('')}
+    <div class="btns" style="margin:0 0 14px"><button class="btn ghost" style="flex:1" data-act="qAdd">Adicionar item avulso</button><button class="btn" style="flex:1" data-act="qArred">Arredondar preços</button></div>
+    <div class="qtotal"><span>Total para o cliente</span><strong id="q-tot">${brl(c.total)}</strong></div>
+    <div class="privado" id="q-priv">${qPriv(c)}</div>
+    <div class="row"><label class="field"><span>Validade</span><select data-bind="q.validade">${['3','7','15','30'].map(v => `<option value="${v}" ${Q.validade === v ? 'selected' : ''}>${v} dias</option>`).join('')}</select></label>
+    <label class="field"><span>Emitido em</span><input type="date" data-bind="q.data" value="${esc(Q.data)}"></label></div>
+    <label class="field"><span>Observações para o cliente</span><textarea data-bind="q.obs" placeholder="Entrega inclusa. 50% de sinal para confirmar a data.">${esc(Q.obs)}</textarea></label>
+    ${Q.id ? `<div class="btns">${Q.status !== 'aprovado' ? '<button class="btn small" data-act="qVenda" style="flex:1">Virou venda</button>' : ''}<button class="btn small danger" data-act="qDel" style="flex:1">Excluir orçamento</button></div>` : ''}
+  </div>
+  <div class="dlg-foot" style="flex-wrap:wrap">
+    <button class="btn primary" data-act="qPDF" style="flex:1 1 100%">${ic(I.share)}Gerar PDF e compartilhar</button>
+    <button class="btn whats" data-act="qWhats">${ic(I.whats)}WhatsApp (texto)</button>
+    <button class="btn" data-act="qSalvar">Salvar</button>
+  </div></div>`, true);
+}
+function qPriv(c){
+  return `<p>${ic(I.lock)}Só você vê</p><p>Custo ${brl(c.custo)}. Com esses preços você ganha <b class="${c.lucro < 0 ? 'negt' : 'pos'}">${brl(c.lucro)}</b> (${pct(c.mg)} do total).</p>${c.semCusto ? '<p class="warn">Item avulso sem custo conhecido.</p>' : ''}`;
+}
+function qObj(status){
+  const itens = Q.itens.filter(i => i.nome.trim() && num(i.qtd) > 0).map(i => ({receitaId:i.receitaId || '', nome:i.nome.trim(), qtd:num(i.qtd), unid:(i.unid || '').trim(), preco:r2(num(i.preco)), custoUnit:i.custoUnit || 0}));
+  const total = r2(itens.reduce((a, i) => a + i.qtd * i.preco, 0));
+  const custo = r2(itens.reduce((a, i) => a + i.qtd * i.custoUnit, 0) + num(Q.extras));
+  const o = {id:Q.id || uid(), numero:Q.numero, data:Q.data || hoje(), cliente:Q.cliente.trim(), telefone:fmtTel(Q.telefone), dataEvento:Q.dataEvento || '', validade:num(Q.validade) || 7, obs:Q.obs.trim(), itens, extras:num(Q.extras), total, custo, status};
+  return o;
+}
+function qSalvar(status){
+  const o = qObj(status || (Q.status === 'rascunho' ? 'rascunho' : Q.status));
+  if (!o.itens.length){ toast('Adicione pelo menos um item com quantidade'); return null; }
+  save('orcamentos', o); Q.id = o.id; Q.status = o.status; return o;
+}
+function textoOrc(o){
+  const n = negocio();
+  return [`*Orçamento Nº ${o.numero}${n.nome ? ' - ' + n.nome : ''}*`, o.cliente ? `Para: ${o.cliente}` : '', o.dataEvento ? `Evento: ${dataBR(o.dataEvento)}` : '', '',
+    ...o.itens.map(i => `• ${fq(i.qtd)}${i.unid ? ' ' + i.unid : ''} ${i.nome}: ${brl(i.qtd * i.preco)}`), '',
+    `*Total: ${brl(o.total)}*`, `Válido até ${dataBR(addDias(o.data, o.validade))}`, o.obs ? '\n' + o.obs : '', n.pix ? `\nPix: ${n.pix}` : ''].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').replace(/\u00a0/g, ' ');
+}
+function waLink(tel, txt){
+  let d = String(tel || '').replace(/\D/g, '');
+  if (d && (d.length === 10 || d.length === 11)) d = '55' + d;
+  return `https://wa.me/${d.length >= 12 ? d : ''}?text=${encodeURIComponent(txt)}`;
+}
+async function gerarPDF(o){
+  await loadScript(JSPDF);
+  const {jsPDF} = window.jspdf; const doc = new jsPDF({unit:'mm', format:'a4'});
+  const W = 210, M = 16, t = s => String(s ?? '').replace(/[\u00a0\u202f]/g, ' ');
+  const n = negocio();
+  const ROXO = [123,31,162], MANGA = [255,179,32], TINTA = [31,20,48], CINZA = [107,95,122], CLARO = [245,236,251];
+  doc.setFillColor(...ROXO); doc.rect(0, 0, W, 40, 'F');
+  doc.setFillColor(...MANGA); doc.rect(0, 40, W, 2.5, 'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+  doc.text(doc.splitTextToSize(t(n.nome || 'Orçamento'), 115)[0], M, 18);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  const contato = [n.telefone && 'WhatsApp ' + n.telefone, n.cidade].filter(Boolean).join('    ');
+  if (contato) doc.text(t(contato), M, 27);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('ORÇAMENTO', W - M, 16, {align:'right'});
+  doc.setFontSize(22); doc.text('Nº ' + String(o.numero).padStart(4, '0'), W - M, 28, {align:'right'});
+  let y = 56;
+  doc.setTextColor(...CINZA); doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  doc.text('PARA', M, y); doc.text('EMITIDO EM', 122, y); doc.text('VÁLIDO ATÉ', 162, y);
+  y += 6; doc.setTextColor(...TINTA); doc.setFontSize(12.5);
+  doc.text(doc.splitTextToSize(t(o.cliente || 'Cliente'), 100)[0], M, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(dataBR(o.data), 122, y); doc.text(dataBR(addDias(o.data, o.validade)), 162, y);
+  const sub = [o.telefone, o.dataEvento && 'Evento em ' + dataBR(o.dataEvento)].filter(Boolean).join('    ');
+  if (sub){ y += 6; doc.setFontSize(10); doc.setTextColor(...CINZA); doc.text(t(sub), M, y); }
+  y += 14;
+  const X = {item:M, qtd:122, unit:160, tot:W - M};
+  const head = () => { doc.setFillColor(...CLARO); doc.roundedRect(M - 3, y - 6.5, W - 2 * M + 6, 10, 2, 2, 'F');
+    doc.setTextColor(...ROXO); doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+    doc.text('ITEM', X.item, y); doc.text('QTD', X.qtd, y, {align:'right'}); doc.text('VALOR UNIT.', X.unit, y, {align:'right'}); doc.text('TOTAL', X.tot, y, {align:'right'}); y += 10; };
+  head();
+  o.itens.forEach(it => {
+    doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+    const ls = doc.splitTextToSize(t(it.nome), 72); const h = ls.length * 5;
+    if (y + h > 262){ doc.addPage(); y = 24; head(); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
+    doc.setTextColor(...TINTA); doc.text(ls, X.item, y);
+    doc.text(t(fq(it.qtd) + (it.unid ? ' ' + it.unid : '')), X.qtd, y, {align:'right'});
+    doc.text(t(brl(it.preco)), X.unit, y, {align:'right'});
+    doc.setFont('helvetica','bold'); doc.text(t(brl(it.qtd * it.preco)), X.tot, y, {align:'right'});
+    const bottom = y + h - 1.5; doc.setDrawColor(232,223,241); doc.setLineWidth(.3); doc.line(M, bottom, W - M, bottom); y = bottom + 6.5;
+  });
+  if (y > 245){ doc.addPage(); y = 24; }
+  y += 2; doc.setFillColor(...MANGA); doc.roundedRect(W - M - 86, y, 86, 20, 3, 3, 'F');
+  doc.setTextColor(59,37,0); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('TOTAL', W - M - 80, y + 12);
+  doc.setFontSize(17); doc.text(t(brl(o.total)), W - M - 6, y + 13, {align:'right'}); y += 32;
+  const bloco = (titulo, texto) => { const ls = doc.splitTextToSize(t(texto), W - 2 * M); if (y + ls.length * 5 + 8 > 280){ doc.addPage(); y = 24; }
+    doc.setTextColor(...CINZA); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(titulo, M, y); y += 5.5;
+    doc.setTextColor(...TINTA); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.text(ls, M, y); y += ls.length * 5 + 6; };
+  if (o.obs) bloco('OBSERVAÇÕES', o.obs);
+  if (n.pix) bloco('PAGAMENTO VIA PIX', n.pix);
+  const pgs = doc.getNumberOfPages();
+  for (let p = 1; p <= pgs; p++){ doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...CINZA);
+    doc.text('Obrigado pela preferência!', W / 2, 289, {align:'center'}); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
+  const nome = `orcamento-${String(o.numero).padStart(4, '0')}${o.cliente ? '-' + o.cliente.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '-').toLowerCase() : ''}.pdf`;
+  return {blob: doc.output('blob'), nome};
+}
+async function enviarArquivo(blob, nome, titulo, texto){
+  const file = new File([blob], nome, {type:'application/pdf'});
+  try { if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:titulo, text:texto}); return 'share'; } }
+  catch(e){ if (e.name === 'AbortError') return 'cancel'; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+  return 'download';
+}
+async function gerarRelatorioPDF(ym){
+  await loadScript(JSPDF);
+  const {jsPDF} = window.jspdf; const doc = new jsPDF({unit:'mm', format:'a4'});
+  const W = 210, M = 16, t = s => String(s ?? '').replace(/[\u00a0\u202f]/g, ' ');
+  const n = negocio(), r = resumoMes(ym);
+  const ROXO = [123,31,162], MANGA = [255,179,32], TINTA = [31,20,48], CINZA = [107,95,122], CLARO = [245,236,251], VERDE = [14,159,79], VERM = [224,53,43];
+  doc.setFillColor(...ROXO); doc.rect(0, 0, W, 36, 'F'); doc.setFillColor(...MANGA); doc.rect(0, 36, W, 2.5, 'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19);
+  doc.text('Relatório de ' + t(mesNome(ym)), M, 18);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); if (n.nome) doc.text(t(n.nome), M, 27);
+  doc.text('Gerado em ' + dataBR(hoje()), W - M, 27, {align:'right'});
+  let y = 50;
+  const box = (x, w, rot, val, cor, fundo) => { doc.setFillColor(...fundo); doc.roundedRect(x, y, w, 22, 3, 3, 'F');
+    doc.setTextColor(...CINZA); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(rot, x + 5, y + 7.5);
+    doc.setTextColor(...cor); doc.setFontSize(14); doc.text(t(val), x + 5, y + 16.5); };
+  const bw = (W - 2 * M - 9) / 4;
+  box(M, bw, 'ENTROU', brl(r.fat), TINTA, CLARO);
+  box(M + (bw + 3), bw, 'CUSTOS', brl(r.custo), TINTA, CLARO);
+  box(M + 2 * (bw + 3), bw, 'LUCRO', brl(r.lucro), r.lucro < 0 ? VERM : VERDE, r.lucro < 0 ? [253,228,225] : [220,245,230]);
+  box(M + 3 * (bw + 3), bw, 'MARGEM', pct(r.mg), r.lucro < 0 ? VERM : VERDE, r.lucro < 0 ? [253,228,225] : [220,245,230]);
+  y += 34;
+  doc.setTextColor(...CINZA); doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text(t(`${r.lista.length} evento${r.lista.length === 1 ? '' : 's'} no mês` + (r.lista.length ? `, lucro médio de ${brl(r.lucro / r.lista.length)} por evento.` : '.')), M, y);
+  y += 10;
+  const X = {data:M, ev:M + 20, ent:118, cus:146, luc:174, mg:W - M};
+  const head = () => { doc.setFillColor(...CLARO); doc.roundedRect(M - 3, y - 6.5, W - 2 * M + 6, 10, 2, 2, 'F');
+    doc.setTextColor(...ROXO); doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+    doc.text('DATA', X.data, y); doc.text('EVENTO', X.ev, y); doc.text('ENTROU', X.ent, y, {align:'right'}); doc.text('CUSTO', X.cus, y, {align:'right'}); doc.text('LUCRO', X.luc, y, {align:'right'}); doc.text('MARGEM', X.mg, y, {align:'right'}); y += 10; };
+  head();
+  r.lista.forEach(l => {
+    const c = num(l.custoItens) + num(l.extras), f = num(l.faturamento), lu = f - c;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const ls = doc.splitTextToSize(t(l.descricao), 62); const h = ls.length * 5;
+    if (y + h > 270){ doc.addPage(); y = 24; head(); doc.setFont('helvetica','normal'); doc.setFontSize(10); }
+    doc.setTextColor(...TINTA); doc.text(dataCurta(l.data), X.data, y); doc.text(ls, X.ev, y);
+    doc.text(t(brl(f)), X.ent, y, {align:'right'}); doc.text(t(brl(c)), X.cus, y, {align:'right'});
+    doc.setTextColor(...(lu < 0 ? VERM : VERDE)); doc.setFont('helvetica','bold'); doc.text(t(brl(lu)), X.luc, y, {align:'right'});
+    doc.text(f ? pct(lu / f) : '', X.mg, y, {align:'right'});
+    const bottom = y + h - 1.5; doc.setDrawColor(232,223,241); doc.setLineWidth(.3); doc.line(M, bottom, W - M, bottom); y = bottom + 6.5;
+  });
+  if (y > 262){ doc.addPage(); y = 24; }
+  doc.setFillColor(...MANGA); doc.roundedRect(M - 3, y - 6, W - 2 * M + 6, 11, 2, 2, 'F');
+  doc.setTextColor(59,37,0); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('TOTAL DO MÊS', X.data, y + 1); doc.text(t(brl(r.fat)), X.ent, y + 1, {align:'right'}); doc.text(t(brl(r.custo)), X.cus, y + 1, {align:'right'});
+  doc.text(t(brl(r.lucro)), X.luc, y + 1, {align:'right'}); doc.text(pct(r.mg), X.mg, y + 1, {align:'right'});
+  const pgs = doc.getNumberOfPages();
+  for (let p = 1; p <= pgs; p++){ doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...CINZA);
+    doc.text('Caderno de Custos. Custos calculados com os preços do dia de cada lançamento.', M, 289); if (pgs > 1) doc.text(`${p}/${pgs}`, W - M, 289, {align:'right'}); }
+  return {blob: doc.output('blob'), nome: `relatorio-${ym}.pdf`};
+}
+async function compartilharRelatorio(){
+  toast('Gerando PDF…');
+  let pdf; try { pdf = await gerarRelatorioPDF(REL); } catch(e){ toast('Não foi possível gerar o PDF sem internet na primeira vez. Conecte e tente de novo.'); return; }
+  const r = await enviarArquivo(pdf.blob, pdf.nome, 'Relatório de ' + mesNome(REL), 'Relatório de ' + mesNome(REL));
+  if (r === 'share') toast('Relatório compartilhado'); else if (r === 'download') toast('PDF do relatório baixado');
+}
+async function compartilharPDF(){
+  const o = qSalvar(Q.status === 'aprovado' ? 'aprovado' : 'enviado'); if (!o) return;
+  toast('Gerando PDF…');
+  let pdf; try { pdf = await gerarPDF(o); } catch(e){ toast('Não foi possível gerar o PDF sem internet na primeira vez. Conecte e tente de novo.'); return; }
+  const r = await enviarArquivo(pdf.blob, pdf.nome, 'Orçamento Nº ' + o.numero, `Orçamento Nº ${o.numero}: ${brl(o.total)}`);
+  if (r === 'share') toast('Orçamento enviado'); else if (r === 'download') toast('PDF baixado. Anexe no WhatsApp.');
+  render(); renderQ();
+}
+function enviarTexto(){
+  const o = qSalvar(Q.status === 'aprovado' ? 'aprovado' : 'enviado'); if (!o) return;
+  const a = document.createElement('a'); a.href = waLink(o.telefone, textoOrc(o)); a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+  render(); renderQ();
+}
+
+/* ============ Ajustes ============ */
+function openAjustes(){
+  const d = dlg(); if (d.open && d.dataset.kind === 'ajustes' && d.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  NEG = NEG || negocio();
+  const cfg = Cloud.cfg(); let nuvem;
+  if (!cfg) nuvem = `<p class="hint">Com a nuvem ligada, os dados ficam na sua conta Google e voltam se trocar de celular. Crie um projeto grátis no Firebase (passo a passo no LEIA-ME) e cole a configuração aqui.</p>
+    <label class="field" style="margin-top:8px"><span>Configuração do Firebase</span><textarea class="code" data-id="fbcfg" placeholder='{ apiKey: "...", authDomain: "...", projectId: "..." }'></textarea></label>
+    <button class="btn primary wide" data-act="salvarFb">Ligar a nuvem</button>`;
+  else if (!Cloud.on) nuvem = `<p class="${Cloud.status === 'erro' ? 'warn' : 'hint'}">${Cloud.status === 'erro' ? 'Não foi possível conectar: ' + esc(Cloud.erro) + '. Sem internet, tudo continua salvo no celular.' : 'Conectando…'}</p><div class="btns"><button class="btn" data-act="recarregar">Tentar de novo</button><button class="btn danger" data-act="removerFb">Desligar a nuvem</button></div>`;
+  else if (!Cloud.user) nuvem = `<p class="hint">Entre com a conta Google para guardar e sincronizar os dados.</p><button class="btn primary wide" data-act="login">Entrar com Google</button><div class="btns"><button class="btn danger" data-act="removerFb">Desligar a nuvem</button></div>`;
+  else nuvem = `<p>Conectado como <b>${esc(Cloud.user.email || Cloud.user.displayName)}</b>. ${Cloud.status === 'offline' ? 'Sem internet agora: o que você lançar sobe sozinho quando a conexão voltar.' : 'Tudo sincronizado.'}</p><div class="btns"><button class="btn" data-act="logout">Sair da conta</button><button class="btn danger" data-act="removerFb">Desligar a nuvem</button></div>`;
+  const u = S.meta.ultimoBackup;
+  openDlg('ajustes', `<div class="dlg">${dlgHead('Ajustes')}
+  <div class="dlg-body">
+    <section><h3>Seu negócio</h3><p class="hint" style="margin-bottom:10px">Aparece no topo do orçamento que o cliente recebe.</p>
+      <label class="field"><span>Nome do negócio</span><input data-bind="neg.nome" value="${esc(NEG.nome)}" placeholder="Sabores da Nega"></label>
+      <div class="row"><label class="field"><span>WhatsApp</span><input type="tel" inputmode="numeric" autocomplete="tel-national" data-bind="neg.telefone" value="${esc(fmtTel(NEG.telefone))}" placeholder="(92) 99999-9999"></label>
+      <label class="field"><span>Cidade</span><input data-bind="neg.cidade" value="${esc(NEG.cidade)}" placeholder="Manaus, AM"></label></div>
+      <label class="field"><span>Chave Pix</span><input data-bind="neg.pix" value="${esc(NEG.pix)}" placeholder="E-mail, telefone ou CPF"></label>
+      <label class="field"><span>Observação padrão dos orçamentos</span><textarea data-bind="neg.obsPadrao" placeholder="Entrega inclusa. 50% de sinal para confirmar a data.">${esc(NEG.obsPadrao)}</textarea></label>
+      <button class="btn primary wide" data-act="salvarNeg">Salvar dados do negócio</button></section>
+    <section><h3>Aparência</h3><div class="chips">${[['dark','Escuro'],['light','Claro'],['auto','Igual ao celular']].map(([v, l]) => `<button class="chip" data-act="tema" data-v="${v}" aria-pressed="${temaAtual() === v}">${l}</button>`).join('')}</div></section>
+    <section><h3>Nuvem</h3>${nuvem}</section>
+    <section><h3>Backup</h3><p class="hint">Último backup: ${u ? new Date(u).toLocaleDateString('pt-BR') : 'nunca'}. O arquivo pode ir para o Google Drive ou WhatsApp.</p>
+      <div class="btns"><button class="btn primary" data-act="exportar">Salvar backup</button><label class="btn file-btn">Restaurar backup<input type="file" accept="application/json,.json" data-import></label></div></section>
+    <section><h3>Dados de exemplo</h3><p class="hint">Coloca insumos, receitas, três churrascos de sexta e um orçamento para você ver tudo funcionando.</p><div class="btns"><button class="btn" data-act="exemplo">Carregar exemplo</button></div></section>
+    <section><h3>Apagar tudo</h3><p class="hint">Remove todos os dados${Cloud.user ? ', inclusive da nuvem' : ''}.</p><div class="btns"><button class="btn danger" data-act="apagarTudo">Apagar todos os dados</button></div></section>
+  </div></div>`);
+}
+
+/* ============ Backup ============ */
+async function exportar(){
+  const data = {app:'caderno-de-custos', versao:2, exportadoEm:new Date().toISOString()}; COLS.forEach(c => data[c] = Object.values(S[c]));
+  const txt = JSON.stringify(data, null, 2), nome = `backup-custos-${hoje()}.json`;
+  const ok = () => { setMeta('ultimoBackup', new Date().toISOString()); toast('Backup salvo'); render(); };
+  try { const file = new File([txt], nome, {type:'application/json'});
+    if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:'Backup do Caderno de Custos'}); return ok(); }
+  } catch(e){ if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type:'application/json'})); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); ok();
+}
+async function importar(file){
+  try { const d = JSON.parse(await file.text());
+    if (d.app !== 'caderno-de-custos' || !Array.isArray(d.insumos)) throw new Error();
+    if (!await askConfirm('Restaurar este backup? Os dados atuais serão substituídos.', 'Restaurar')) return;
+    COLS.forEach(c => Object.keys(S[c]).forEach(id => remove(c, id)));
+    COLS.forEach(c => (d[c] || []).forEach(o => o && o.id && save(c, o)));
+    NEG = null; toast('Backup restaurado'); closeDlg(); render();
+  } catch(e){ toast('Esse arquivo não é um backup do Caderno de Custos'); }
+}
+
+/* ============ Exemplo ============ */
+function exemplo(){
+  const In = (nome, preco, qtd, unidade) => { const o = {id:uid(), nome, preco, qtd, unidade}; save('insumos', o); return o.id; };
+  const trigo = In('Trigo', 5.99, 1, 'kg'), frango = In('Peito de frango', 18.9, 1, 'kg'), oleo = In('Óleo de soja', 8.49, 900, 'ml'), leite = In('Leite', 5.29, 1, 'L'),
+    marg = In('Margarina', 9.9, 500, 'g'), ovos = In('Ovos', 22, 30, 'un'), rosca = In('Farinha de rosca', 6.5, 500, 'g'), alcatra = In('Alcatra', 44.9, 1, 'kg'),
+    ling = In('Linguiça', 22.9, 1, 'kg'), carvao = In('Carvão', 19.9, 3, 'kg'), sal = In('Sal grosso', 3.5, 1, 'kg'), mand = In('Farinha de mandioca', 9, 1, 'kg'),
+    arroz = In('Arroz', 27.9, 5, 'kg'), acucar = In('Açúcar', 4.79, 1, 'kg'), choc = In('Chocolate em pó', 8.9, 200, 'g');
+  const R = (nome, categoria, rendimento, rendUnid, itens) => { const o = {id:uid(), nome, categoria, rendimento, rendUnid, itens:itens.map(([insumoId, qtd, unidade]) => ({insumoId, qtd, unidade}))}; save('receitas', o); return o; };
+  const cx = R('Coxinha de frango', 'Salgados', 100, 'salgados', [[trigo,1,'kg'],[frango,1,'kg'],[leite,1,'L'],[marg,100,'g'],[oleo,900,'ml'],[rosca,500,'g'],[ovos,3,'un']]);
+  const ch = R('Churrasco', 'Churrasco', 20, 'pessoas', [[alcatra,4,'kg'],[ling,2,'kg'],[carvao,6,'kg'],[sal,300,'g']]);
+  const fa = R('Farofa', 'Acompanhamentos', 20, 'porções', [[mand,1,'kg'],[marg,200,'g'],[ling,300,'g'],[ovos,4,'un']]);
+  const ar = R('Arroz branco', 'Acompanhamentos', 20, 'porções', [[arroz,2,'kg'],[oleo,100,'ml']]);
+  const bo = R('Bolo de chocolate', 'Bolos e doces', 16, 'fatias', [[trigo,300,'g'],[acucar,300,'g'],[choc,100,'g'],[ovos,4,'un'],[leite,240,'ml'],[oleo,120,'ml']]);
+  const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 2) % 7));
+  [[150, 3000, 250], [120, 2450, 200], [160, 3300, 260]].forEach(([p, rec, ex], k) => {
+    const dt = new Date(d); dt.setDate(d.getDate() - 7 * k);
+    const itens = [[ch, p], [fa, p], [ar, p]].map(([r, q]) => ({receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:q, unidade:r.rendUnid, custo:r2(custoReceita(r).total * q / r.rendimento)}));
+    save('lancamentos', {id:uid(), data:ymd(dt), descricao:'Churrasco de sexta (exemplo)', itens, extras:ex, extrasDesc:'Gás e ajudante', custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:rec});
+  });
+  const cu = r => custoReceita(r).total / r.rendimento;
+  const its = [{receitaId:cx.id, nome:'Coxinha de frango', qtd:200, unid:'salgados', preco:.9, custoUnit:cu(cx)}, {receitaId:bo.id, nome:'Bolo de chocolate', qtd:32, unid:'fatias', preco:4.5, custoUnit:cu(bo)}, {receitaId:'', nome:'Entrega', qtd:1, unid:'', preco:20, custoUnit:0}];
+  save('orcamentos', {id:uid(), numero:proxNumero(), data:hoje(), cliente:'Dona Maria (exemplo)', telefone:'', dataEvento:addDias(hoje(), 12), validade:7, obs:'50% de sinal para confirmar a data.', itens:its, extras:0, total:r2(its.reduce((a, i) => a + i.qtd * i.preco, 0)), custo:r2(its.reduce((a, i) => a + i.qtd * i.custoUnit, 0)), status:'enviado'});
+  REL = hoje().slice(0, 7); closeDlg(); toast('Exemplo carregado'); render();
+}
+
+/* ============ Ações ============ */
+const ACT = {
+  tab: b => { TAB = b.dataset.id; window.scrollTo(0, 0); render(); },
+  cad: b => { CAD = b.dataset.v; render(); },
+  irInsumos: () => { CAD = 'ins'; TAB = 'cad'; window.scrollTo(0, 0); render(); },
+  ajustes: () => { NEG = null; openAjustes(); },
+  tema: b => { aplicarTema(b.dataset.v); openAjustes(); },
+  fechar: () => closeDlg(),
+  addLinha: b => { FORMS[b.dataset.f]().linhas.push({receitaId:'', qtd:''}); render(); },
+  rmLinha: b => { const f = FORMS[b.dataset.f](); f.linhas.splice(+b.dataset.i, 1); if (!f.linhas.length) f.linhas.push({receitaId:'', qtd:''}); render(); },
+  margem: b => { ORC.margem = b.dataset.v; render(); },
+  orcParaLan: () => { const c = calcLinhas(ORC.linhas), ex = num(ORC.extras);
+    LAN = {...novoLan(), linhas:clean(ORC.linhas.filter(l => l.receitaId)), extras:ORC.extras, recebido:inStr((c.custo + ex) / (1 - margemOrc()))};
+    TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
+  orcCliente: () => novoOrcCliente(),
+  abrirOrc: b => abrirOrc(b.dataset.id),
+  qAdd: () => { Q.itens.push({receitaId:'', nome:'', qtd:'1', unid:'', preco:'', custoUnit:0}); renderQ(); setTimeout(() => { const els = dlg().querySelectorAll('.qitem .nome'); els[els.length - 1]?.focus(); }, 50); },
+  qRm: b => { Q.itens.splice(+b.dataset.i, 1); renderQ(); },
+  qArred: () => { Q.itens.forEach(i => i.preco = inStr(roundNice(num(i.preco)))); renderQ(); toast('Preços arredondados para cima'); },
+  qSalvar: () => { if (qSalvar()){ toast('Orçamento salvo'); closeDlg(); render(); } },
+  qPDF: () => compartilharPDF(),
+  qWhats: () => enviarTexto(),
+  qVenda: () => { const o = qSalvar('aprovado'); if (!o) return;
+    const receitas = o.itens.filter(i => S.receitas[i.receitaId]);
+    LAN = {...novoLan(), data:o.dataEvento || hoje(), descricao:'Pedido de ' + (o.cliente || 'cliente'), linhas:receitas.length ? receitas.map(i => ({receitaId:i.receitaId, qtd:inStr(i.qtd)})) : [{receitaId:'', qtd:''}], extras:inStr(o.extras || ''), recebido:inStr(o.total), orcId:o.id};
+    closeDlg(); TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
+  qDel: async () => { if (await askConfirm('Excluir este orçamento?', 'Excluir')){ remove('orcamentos', Q.id); closeDlg(); render(); toast('Orçamento excluído'); } },
+  salvarLan: () => {
+    const itens = LAN.linhas.filter(l => S.receitas[l.receitaId] && num(l.qtd) > 0).map(l => { const r = S.receitas[l.receitaId];
+      return {receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:num(l.qtd), unidade:r.rendUnid, custo:r2(custoReceita(r).total * num(l.qtd) / (num(r.rendimento) || 1))}; });
+    if (!LAN.data) return toast('Informe a data');
+    if (!num(LAN.recebido)) return toast('Informe quanto entrou');
+    save('lancamentos', {id:uid(), data:LAN.data, descricao:LAN.descricao.trim() || (itens[0] ? itens[0].nome : 'Venda'), itens, extras:num(LAN.extras), extrasDesc:LAN.extrasDesc.trim(), custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:num(LAN.recebido), orcId:LAN.orcId || ''});
+    LAN = novoLan(); render(); toast('Lançamento salvo');
+  },
+  verLan: b => { const l = S.lancamentos[b.dataset.id]; const c = num(l.custoItens) + num(l.extras), lu = num(l.faturamento) - c;
+    openDlg('verlan', `<div class="dlg">${dlgHead(esc(l.descricao))}
+    <div class="dlg-body"><p class="hint">${new Date(l.data + 'T12:00').toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</p>
+    <div class="lucro-box ${lu < 0 ? 'neg' : ''}" style="margin-top:10px"><span>${lu < 0 ? 'Prejuízo' : 'Lucro'}</span><strong>${brl(lu)}</strong><span>${num(l.faturamento) ? pct(lu / num(l.faturamento)) + ' do que entrou' : ''}</span></div>
+    <dl class="resumo">${(l.itens || []).map(i => `<div><dt>${esc(i.nome)}, ${fq(i.qtd)} ${esc(i.unidade)}</dt><dd>${brl(i.custo)}</dd></div>`).join('')}
+    ${num(l.extras) ? `<div><dt>Extras${l.extrasDesc ? ' (' + esc(l.extrasDesc) + ')' : ''}</dt><dd>${brl(num(l.extras))}</dd></div>` : ''}
+    <div class="total"><dt>Custo total</dt><dd>${brl(c)}</dd></div><div><dt>Entrou</dt><dd>${brl(num(l.faturamento))}</dd></div></dl>
+    <p class="hint" style="margin-top:10px">Os custos acima são os do dia do lançamento.</p></div>
+    <div class="dlg-foot"><button class="btn danger" data-act="delLan" data-id="${l.id}">Excluir lançamento</button></div></div>`); },
+  delLan: async b => { if (await askConfirm('Excluir este lançamento?', 'Excluir')){ remove('lancamentos', b.dataset.id); closeDlg(); render(); toast('Lançamento excluído'); } },
+  mes: b => { let [y, m] = REL.split('-').map(Number); m += +b.dataset.d; if (m < 1){ m = 12; y--; } if (m > 12){ m = 1; y++; } REL = `${y}-${pad(m)}`; render(); },
+  relPDF: () => compartilharRelatorio(),
+  novoInsumo: () => openInsumo(''),
+  editInsumo: b => openInsumo(b.dataset.id),
+  salvarInsumo: () => { if (!INS.nome.trim()) return toast('Dê um nome ao insumo'); if (!num(INS.preco) || !num(INS.qtd)) return toast('Informe o preço e o tamanho da embalagem');
+    save('insumos', {id:INS.id || uid(), nome:INS.nome.trim(), preco:num(INS.preco), qtd:num(INS.qtd), unidade:INS.unidade}); closeDlg(); render(); toast('Insumo salvo'); },
+  delInsumo: async () => { const id = INS.id; const usado = Object.values(S.receitas).filter(r => (r.itens || []).some(i => i.insumoId === id)).map(r => r.nome);
+    if (await askConfirm(usado.length ? `Esse insumo está em: ${usado.join(', ')}. Excluir mesmo assim? Essas receitas vão ficar com ingrediente faltando.` : 'Excluir este insumo?', 'Excluir')){ remove('insumos', id); closeDlg(); render(); toast('Insumo excluído'); } },
+  novaReceita: () => openReceita(''),
+  editReceita: b => openReceita(b.dataset.id),
+  addItem: () => { RF.itens.push({insumoId:'', qtd:'', unidade:'g'}); renderRf(); },
+  rmItem: b => { RF.itens.splice(+b.dataset.i, 1); renderRf(); },
+  salvarReceita: () => { if (!RF.nome.trim()) return toast('Dê um nome à receita'); if (!num(RF.rendimento)) return toast('Informe quanto a receita rende');
+    const itens = RF.itens.filter(i => i.insumoId && num(i.qtd) > 0).map(i => ({insumoId:i.insumoId, qtd:num(i.qtd), unidade:i.unidade}));
+    if (!itens.length) return toast('Adicione pelo menos um ingrediente');
+    save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:RF.categoria, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens}); closeDlg(); render(); toast('Receita salva'); },
+  delReceita: async () => { if (await askConfirm('Excluir esta receita? Os lançamentos antigos continuam no relatório.', 'Excluir')){ remove('receitas', RF.id); closeDlg(); render(); toast('Receita excluída'); } },
+  salvarNeg: () => { save('config', {...NEG, id:'negocio', nome:NEG.nome.trim(), telefone:fmtTel(NEG.telefone), cidade:NEG.cidade.trim(), pix:NEG.pix.trim(), obsPadrao:NEG.obsPadrao.trim()}); toast('Dados do negócio salvos'); render(); },
+  exportar: () => exportar(),
+  exemplo: async () => { if (totalItens() && !await askConfirm('Adicionar os dados de exemplo junto com os seus?', 'Adicionar')) return; exemplo(); },
+  apagarTudo: async () => { if (await askConfirm('Apagar todos os dados? Não dá para desfazer.', 'Apagar tudo')){ COLS.forEach(c => Object.keys(S[c]).forEach(id => remove(c, id))); NEG = null; closeDlg(); render(); toast('Dados apagados'); } },
+  salvarFb: () => { const raw = $('[data-id="fbcfg"]').value; try {
+      const m = raw.match(/\{[\s\S]*\}/); if (!m) throw 0;
+      const json = m[0].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/g, '}');
+      const cfg = JSON.parse(json); if (!cfg.apiKey || !cfg.projectId) throw 0;
+      localStorage.setItem('cc:fbconfig', JSON.stringify(cfg)); location.reload();
+    } catch(e){ toast('Não reconheci a configuração. Cole o bloco firebaseConfig inteiro.'); } },
+  removerFb: async () => { if (await askConfirm('Desligar a nuvem neste aparelho? Os dados continuam no celular e na sua conta.', 'Desligar')){ localStorage.removeItem('cc:fbconfig'); location.reload(); } },
+  recarregar: () => location.reload(),
+  login: () => Cloud.login(),
+  logout: () => Cloud.logout()
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; if (b.tagName === 'BUTTON') e.preventDefault(); ACT[b.dataset.act]?.(b, e); });
+
+function bind(t){
+  const path = t.dataset.bind; if (!path) return;
+  if (path === 'busca'){ BUSCA = t.value; const b = BUSCA.trim().toLowerCase(); $('#ins-list').innerHTML = insLista(Object.values(S.insumos).sort((a,c) => a.nome.localeCompare(c.nome)).filter(i => i.nome.toLowerCase().includes(b))); return; }
+  const [f, ...parts] = path.split('.'); let o = FORMS[f](); if (!o) return;
+  for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts.at(-1)] = t.value;
+  if (f === 'rf' && parts[0] === 'itens' && parts[2] === 'insumoId'){ const ins = S.insumos[t.value]; if (ins) o.unidade = FAM_UNITS[UNITS[ins.unidade].f][0]; }
+  if (f === 'orc'){ $('#orc-result').innerHTML = orcResult(); if (parts[0] === 'margem') document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.v === t.value)); }
+  if (f === 'lan') $('#lan-result').innerHTML = lanResult();
+  if (f === 'ins') $('#ins-prev').innerHTML = insPrev();
+  if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); }
+  if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
+}
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.type === 'tel'){
+    const apagando = e.inputType && e.inputType.startsWith('delete');
+    const antes = t.value.slice(0, t.selectionStart).replace(/\D/g, '').length;
+    let m = fmtTel(t.value);
+    if (apagando && m.length > t.value.length) m = t.value;
+    if (m !== t.value){
+      t.value = m;
+      let pos = 0, dig = 0; while (pos < m.length && dig < antes){ if (/\d/.test(m[pos])) dig++; pos++; }
+      if (!apagando && pos < m.length && /[)\s-]/.test(m[pos])) while (pos < m.length && /[)\s-]/.test(m[pos])) pos++;
+      try { t.setSelectionRange(pos, pos); } catch(err){}
+    }
+  }
+  bind(t);
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches('[data-import]')){ if (t.files[0]) importar(t.files[0]); t.value = ''; return; }
+  if (t.dataset.rerender){ bind(t); if (t.dataset.rerender === 'rf') renderRf(); else { t.blur(); render(); } }
+});
+
+/* ============ Início ============ */
+(async () => {
+  aplicarTema(temaAtual());
+  await Local.open();
+  const salvo = await Local.get('state');
+  if (salvo && typeof salvo === 'object') S = {insumos:{}, receitas:{}, lancamentos:{}, orcamentos:{}, config:{}, meta:{}, ...salvo};
+  COLS.forEach(c => S[c] ||= {});
+  render();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  Cloud.init();
+  if (navigator.onLine) setTimeout(() => loadScript(JSPDF).catch(() => {}), 2500);
+})();
+</script>
+</body>
+</html>
