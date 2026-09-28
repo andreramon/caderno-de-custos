@@ -86,7 +86,9 @@ Na aba **Relatório**, escolha o mês e toque em **Gerar PDF do relatório**. O 
 
 - **Custo do insumo** = preço da embalagem ÷ tamanho da embalagem (em g, ml ou unidade).
 - **Custo da receita** = soma dos ingredientes. **Custo de cada um** = custo da receita ÷ rendimento.
-- **Preço sugerido no orçamento** = custo total ÷ (1 − margem). Com 20%, um custo de R$ 80 vira R$ 100, e o lucro de R$ 20 é 20% do valor cobrado.
+- **Preço sugerido no orçamento, em %** = custo total ÷ (1 − margem). Com 20%, um custo de R$ 80 vira R$ 100, e o lucro de R$ 20 é 20% do valor cobrado.
+- **Preço sugerido no orçamento, em reais** = custo total + lucro desejado. O app mostra quanto isso representa em % do valor cobrado e em % sobre o custo.
+- **Preço de venda da receita:** cada receita pode ter o preço de venda de cada unidade. Ele alimenta o **preço de tabela** no Orçar e preenche sozinho o **valor total** ao lançar uma venda (dá para alterar se houver desconto).
 - **Lucro da venda** = valor da venda − (custo das receitas + custos extras). O percentual é sobre o valor da venda.
 - O custo de cada venda fica **congelado no dia do lançamento**, então mudar o preço de um insumo depois não altera o lucro das semanas anteriores.
 

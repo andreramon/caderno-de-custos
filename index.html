@@ -244,6 +244,7 @@ dialog::backdrop{background:rgba(24,10,36,.6)}
 
 #toast{position:fixed;inset:auto;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);margin:0;border:0;background:var(--ink);color:var(--bg);padding:13px 18px;border-radius:16px;font-weight:800;font-size:1rem;max-width:min(92%,420px);width:max-content;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:50;pointer-events:none}
 #toast:not(:popover-open){display:none}
+.linkbtn{background:none;border:0;padding:0;color:var(--acai);font-weight:800;text-decoration:underline;cursor:pointer;font-size:inherit}
 #toast:popover-open{animation:toastIn .2s ease-out}
 #toast.ok{background:#0E9F4F;color:#fff}
 #toast.erro{background:#D6352B;color:#fff}
@@ -426,7 +427,7 @@ function calcLinhas(linhas){
   linhas.forEach(l => {
     const r = S.receitas[l.receitaId]; const q = num(l.qtd); if (!r || q <= 0) return;
     const f = q / (num(r.rendimento) || 1); const cr = custoReceita(r);
-    custo += cr.total * f; detalhes.push({id:r.id, nome:r.nome, qtd:q, unid:r.rendUnid, custo:cr.total * f, falta:cr.falta});
+    custo += cr.total * f; detalhes.push({id:r.id, nome:r.nome, qtd:q, unid:r.rendUnid, custo:cr.total * f, falta:cr.falta, venda:num(r.preco) ? num(r.preco) * q : null});
     (r.itens || []).forEach(it => { const c = custoItem(it); if (c.base) compras[it.insumoId] = (compras[it.insumoId] || 0) + c.base * f; });
   });
   return {custo, detalhes, compras};
@@ -460,11 +461,14 @@ function aplicarTema(t){
   const escuro = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.querySelector('meta[name="theme-color"]').content = escuro ? '#2A0D45' : '#6A1B9A';
 }
-const margemOrc = () => Math.min(Math.max(num(ORC.margem) / 100, 0), .95);
+function margemOrc(){
+  if (ORC.modo === 'valor'){ const c = calcLinhas(ORC.linhas).custo + num(ORC.extras), lv = Math.max(num(ORC.lucroValor), 0); return c + lv > 0 ? Math.min(lv / (c + lv), .95) : 0; }
+  return Math.min(Math.max(num(ORC.margem) / 100, 0), .95);
+}
 
 /* ============ Estado dos formulários ============ */
 let TAB = 'ini', CAD = 'rec';
-let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20' };
+let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20', modo:'pct', lucroValor:'' };
 const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje() });
 let LAN = novoLan();
 let REL = hoje().slice(0, 7);
@@ -523,8 +527,24 @@ function linhasHTML(f, linhas){
       <select data-bind="${f}.linhas.${i}.receitaId" data-rerender="${f}" aria-label="Receita">${receitaOpts(l.receitaId)}</select>
       <div class="qtd"><input inputmode="decimal" data-bind="${f}.linhas.${i}.qtd" value="${esc(l.qtd)}" placeholder="Quantidade" aria-label="Quantidade"><small>${esc(r ? r.rendUnid : '')}</small></div>
       <button class="icon-btn" data-act="rmLinha" data-f="${f}" data-i="${i}" aria-label="Remover item">${ic(I.x)}</button>
+      ${f === 'lan' ? `<p class="linha-custo" id="lan-info-${i}">${lanInfo(l)}</p>` : ''}
     </div>`; }).join('')}</div>
     <button class="btn ghost wide" data-act="addLinha" data-f="${f}">Adicionar outro item</button>`;
+}
+function lanInfo(l){
+  const r = S.receitas[l.receitaId], q = num(l.qtd); if (!r || !q) return '';
+  const custo = custoReceita(r).total * q / (num(r.rendimento) || 1);
+  return `Custo ${brl(custo)}. ` + (num(r.preco) ? `Venda ${brl(num(r.preco) * q)} (${brl(num(r.preco))} cada).` : '<span class="warn">Receita sem preço de venda.</span>');
+}
+function somaVendaLan(){ let t = 0, falta = false, algum = false;
+  LAN.linhas.forEach(l => { const r = S.receitas[l.receitaId], q = num(l.qtd); if (!r || !q) return; algum = true; if (num(r.preco)) t += num(r.preco) * q; else falta = true; });
+  return {t:r2(t), falta, algum}; }
+function autoTotalLan(){ if (LAN.manual) return; const {t} = somaVendaLan(); LAN.recebido = t ? moneyStr(t) : ''; const el = $('input[data-bind="lan.recebido"]'); if (el) el.value = LAN.recebido; }
+function lanTotalHint(){
+  const {t, falta, algum} = somaVendaLan(); if (!algum) return 'Escolha os itens acima e o total sai pelo preço de venda de cada receita.';
+  let h = LAN.manual ? (t && Math.abs(t - num(LAN.recebido)) > .004 ? `Soma dos itens: ${brl(t)}. <button class="linkbtn" data-act="lanAuto">Usar a soma</button>` : 'Valor digitado por você.') : (t ? 'Soma dos preços de venda dos itens. Pode alterar se tiver dado desconto.' : '');
+  if (falta) h += ' <span class="warn">Algum item está sem preço de venda na receita; some o valor dele à mão ou cadastre o preço na receita.</span>';
+  return h;
 }
 function vazioReceitas(){
   const semIns = !Object.keys(S.insumos).length;
@@ -569,9 +589,15 @@ const VIEWS = {
     <div class="panel"><div class="step"><b>1</b><h3>O que o cliente quer</h3></div>${linhasHTML('orc', ORC.linhas)}</div>
     <div class="panel"><div class="step"><b>2</b><h3>Custos extras e lucro</h3></div>
       <label class="field"><span>Gás, entrega, ajudante, embalagem avulsa</span><div class="prefix"><input inputmode="decimal" data-bind="orc.extras" value="${esc(ORC.extras)}" placeholder="0,00"></div></label>
+      <div class="field"><span>Como você quer definir o seu lucro</span>
+        <div class="seg" role="group" aria-label="Tipo de lucro" style="background:var(--bg);margin:2px 0 4px"><button data-act="orcModo" data-v="pct" aria-pressed="${ORC.modo !== 'valor'}">Em %</button><button data-act="orcModo" data-v="valor" aria-pressed="${ORC.modo === 'valor'}">Em reais</button></div></div>
+      ${ORC.modo === 'valor' ? `
+      <label class="field"><span>Quanto você quer ganhar neste pedido</span><div class="prefix"><input inputmode="decimal" data-bind="orc.lucroValor" value="${esc(ORC.lucroValor)}" placeholder="0,00"></div></label>
+      <p class="hint" id="orc-modo-hint" style="margin:0">${orcModoHint()}</p>` : `
       <div class="field"><span>Quanto você quer ganhar sobre o valor cobrado</span>
         <div class="chips">${ms.map(m => `<button class="chip" data-act="margem" data-v="${m}" aria-pressed="${ORC.margem === m}">${m}%</button>`).join('')}</div></div>
-      <label class="field" style="margin-bottom:0"><span>Ou digite outra porcentagem</span><input inputmode="decimal" data-bind="orc.margem" value="${esc(ORC.margem)}"></label>
+      <label class="field"><span>Ou digite outra porcentagem</span><input inputmode="decimal" data-bind="orc.margem" value="${esc(ORC.margem)}"></label>
+      <p class="hint" id="orc-modo-hint" style="margin:0">${orcModoHint()}</p>`}
     </div>
     <div class="step" style="margin:20px 2px 12px"><b>3</b><h3>Preço</h3></div>
     <div id="orc-result">${orcResult()}</div>
@@ -590,7 +616,8 @@ const VIEWS = {
     <div class="panel">
       <div class="row"><label class="field"><span>Custos extras</span><div class="prefix"><input inputmode="decimal" data-bind="lan.extras" value="${esc(LAN.extras)}" placeholder="0,00"></div></label>
       <label class="field"><span>Quais</span><input data-bind="lan.extrasDesc" value="${esc(LAN.extrasDesc)}" placeholder="Gás, ajudante"></label></div>
-      <label class="field"><span>Valor total da venda</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+      <label class="field" style="margin-bottom:4px"><span>Valor total da venda</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+      <p class="hint" id="lan-total-hint" style="margin:0 0 12px">${lanTotalHint()}</p>
       <div class="field"><span>Como vai ser pago</span><div class="chips">${[['pedido','No pedido'],['entrega','Na entrega'],['entrada','Entrada + restante na entrega']].map(([v, l]) => `<button class="chip" data-act="pagto" data-v="${v}" aria-pressed="${LAN.pagamento === v}">${l}</button>`).join('')}</div></div>
       ${LAN.pagamento === 'pedido' ? `<label class="field"><span>Data em que o dinheiro entrou</span><input type="date" data-bind="lan.dataPag" value="${esc(LAN.dataPag)}"></label>` : ''}
       ${LAN.pagamento === 'entrada' ? `<div class="row"><label class="field"><span>Valor da entrada</span><div class="prefix"><input inputmode="decimal" data-bind="lan.entrada" value="${esc(LAN.entrada)}" placeholder="0,00"></div></label>
@@ -636,7 +663,7 @@ function recView(){
   return `<div class="btns" style="margin-top:0"><button class="btn primary" style="flex:2" data-act="novaReceita">Nova receita</button><button class="btn" style="flex:1" data-act="categorias">Categorias</button></div>
   ${categorias().filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
     return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
-    <span class="val">${brl(cr.total)}<small>${brl(cr.unit)} cada</small></span></button>`; }).join('')}</div>`).join('')}`;
+    <span class="val">${num(r.preco) ? `${brl(num(r.preco))}<small>custa ${brl(cr.unit)}</small><small class="pos">lucro ${pct((num(r.preco) - cr.unit) / num(r.preco))}</small>` : `${brl(cr.unit)}<small>custo de cada</small><span class="st rascunho">Sem preço de venda</span>`}</span></button>`; }).join('')}</div>`).join('')}`;
 }
 function insView(){
   const todos = Object.values(S.insumos).sort((a,b) => a.nome.localeCompare(b.nome));
@@ -656,6 +683,12 @@ function lanItem(l){
   return `<button class="item" data-act="verLan" data-id="${l.id}"><span><b>${esc(l.descricao)}</b><small>Evento ${dataCurta(l.data)}: ${brl(f)}</small>${falta ? `<span class="st enviado">Falta receber ${brl(falta)}</span>` : ''}</span><span class="val ${lu < 0 ? 'negt' : 'pos'}">${brl(lu)}<small>${f ? pct(lu / f) : ''}</small></span></button>`;
 }
 
+function orcModoHint(){
+  const c = calcLinhas(ORC.linhas); if (!c.detalhes.length) return '';
+  const custo = c.custo + num(ORC.extras), m = margemOrc(), preco = custo / (1 - m), lucro = preco - custo;
+  if (ORC.modo === 'valor') return num(ORC.lucroValor) ? `Isso dá ${pct(m)} do valor cobrado (${pct(custo ? lucro / custo : 0)} em cima do custo).` : 'Digite quanto você quer ganhar e o preço aparece embaixo.';
+  return `Você ganha ${brl(lucro)} neste pedido.`;
+}
 function orcResult(){
   const c = calcLinhas(ORC.linhas);
   if (!c.detalhes.length) return '<div class="panel"><p class="hint">Escolha uma receita e a quantidade para ver o preço.</p></div>';
@@ -664,7 +697,10 @@ function orcResult(){
   const compras = Object.entries(c.compras).map(([id, q]) => { const i = S.insumos[id]; if (!i) return ''; const u = UNITS[i.unidade]; const emb = num(i.qtd) * u.m; const n = emb ? Math.ceil(q / emb - 1e-9) : 0;
     return `<li><b>${esc(i.nome)}</b>: ${fmtBase(q, u.f)}${emb ? ` (${n} embalage${n > 1 ? 'ns' : 'm'} de ${fq(num(i.qtd))} ${i.unidade})` : ''}</li>`; }).join('');
   const falta = c.detalhes.some(d => d.falta);
+  const temTab = c.detalhes.every(d => d.venda != null), tab = c.detalhes.reduce((a, d) => a + (d.venda || 0), 0);
+  const tabHTML = temTab ? `<div class="panel" style="padding:14px 18px"><p><b>Pelo seu preço de tabela: ${brl(tab)}</b></p><p class="hint">Lucro de ${brl(tab - custo)} (${pct(tab ? (tab - custo) / tab : 0)} do valor). <button class="linkbtn" data-act="orcTabela">Usar este lucro</button></p></div>` : '';
   return `<div class="ticket"><span class="ticket-label">Cobre</span><strong class="ticket-price">${brl(preco)}</strong><span class="ticket-sub">e você ganha ${brl(lucro)}, que são ${pct(m)} do valor</span></div>
+  ${tabHTML}
   ${falta ? '<p class="warn" style="margin-bottom:10px">Alguma receita tem ingrediente sem preço, então o custo pode estar menor do que é.</p>' : ''}
   <div class="btns stack" style="margin:0 0 14px"><button class="btn primary wide" data-act="orcCliente">${ic(I.doc)}Fazer orçamento para o cliente</button>
   <button class="btn wide" data-act="orcParaLan">Lançar direto como venda</button></div>
@@ -678,6 +714,7 @@ function orcResult(){
 function lanResult(){
   const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras, fat = num(LAN.recebido);
   if (!fat && !c.detalhes.length) return '';
+  if (!fat) return `<div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div>${extras ? `<div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>` : ''}<div class="total"><dt>Custo desta venda</dt><dd>${brl(custo)}</dd></div></dl><p class="hint" style="margin-top:8px">Informe o valor da venda para ver o seu lucro.</p></div>`;
   const lucro = fat - custo, m = fat ? lucro / fat : 0;
   return `<div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>${lucro < 0 ? 'Prejuízo' : 'Seu lucro'}</span><strong>${brl(lucro)}</strong><span>${fat ? pct(m) + ' do valor da venda' : 'Informe o valor da venda'}</span></div>
   <div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
@@ -726,7 +763,7 @@ function insPrev(){ const u = UNITS[INS.unidade]; const cb = custoBaseInsumo(INS
 
 function openReceita(id){
   RF = id ? clean(S.receitas[id]) : {id:'', nome:'', categoria:'Salgados', rendimento:'', rendUnid:'unidades', itens:[{insumoId:'', qtd:'', unidade:'g'}]};
-  RF.rendimento = inStr(RF.rendimento); RF.itens.forEach(it => it.qtd = inStr(it.qtd));
+  RF.rendimento = inStr(RF.rendimento); RF.preco = num(RF.preco) ? moneyStr(num(RF.preco)) : ''; RF.itens.forEach(it => it.qtd = inStr(it.qtd));
   renderRf();
 }
 function renderRf(){
@@ -746,7 +783,9 @@ function renderRf(){
       <button class="icon-btn" data-act="rmItem" data-i="${i}" aria-label="Remover ingrediente">${ic(I.x)}</button>
       <p class="linha-custo" id="rf-c-${i}">${rfItemCusto(it)}</p></div>`; }).join('')}</div>
     <button class="btn ghost wide" data-act="addItem">Adicionar ingrediente</button>`}
-    <div class="panel" style="margin:14px 0 4px;background:var(--bg)"><dl class="resumo" id="rf-total">${rfTotal()}</dl></div>
+    <div class="panel" style="margin:14px 0 12px;background:var(--bg)"><dl class="resumo" id="rf-total">${rfTotal()}</dl></div>
+    <label class="field" style="margin-bottom:4px"><span>Preço de venda de cada (${esc(RF.rendUnid || 'unidade')})</span><div class="prefix"><input inputmode="decimal" data-bind="rf.preco" value="${esc(RF.preco)}" placeholder="0,00"></div></label>
+    <p class="hint" id="rf-preco-hint" style="margin-bottom:6px">${rfPrecoHint()}</p>
   </div>
   <div class="dlg-foot">${RF.id ? '<button class="btn danger" data-act="delReceita">Excluir</button>' : ''}<button class="btn primary" data-act="salvarReceita">Salvar</button></div></div>`);
 }
@@ -763,6 +802,12 @@ function renderCats(){
     <div class="row" style="margin-top:14px"><input data-bind="cats.nova" value="${esc(CATS.nova)}" placeholder="Nova categoria" aria-label="Nova categoria"><button class="btn" style="flex:0 0 auto" data-act="catAdd">Adicionar</button></div>
   </div>
   <div class="dlg-foot"><button class="btn primary" data-act="catSalvar">Salvar categorias</button></div></div>`);
+}
+function rfPrecoHint(){
+  const cu = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))}).unit; if (!num(RF.rendimento) || !cu) return 'Monte os ingredientes para ver a sugestão de preço.';
+  const p = num(RF.preco), sug = roundNice(cu / .7);
+  if (!p) return `Sugestão para ganhar 30%: ${brl(sug)} cada. <button class="linkbtn" data-act="rfSug" data-v="${sug}">Usar</button>`;
+  const l = p - cu; return l < 0 ? `<span class="warn">Esse preço fica abaixo do custo (${brl(cu)} cada).</span>` : `Você ganha ${brl(l)} em cada, ${pct(l / p)} do preço.`;
 }
 function rfItemCusto(it){ if (!it.insumoId) return ''; const c = custoItem({...it, qtd:num(it.qtd)}); return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
 function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))});
@@ -1036,12 +1081,12 @@ function exemplo(){
     marg = In('Margarina', 9.9, 500, 'g'), ovos = In('Ovos', 22, 30, 'un'), rosca = In('Farinha de rosca', 6.5, 500, 'g'), alcatra = In('Alcatra', 44.9, 1, 'kg'),
     ling = In('Linguiça', 22.9, 1, 'kg'), carvao = In('Carvão', 19.9, 3, 'kg'), sal = In('Sal grosso', 3.5, 1, 'kg'), mand = In('Farinha de mandioca', 9, 1, 'kg'),
     arroz = In('Arroz', 27.9, 5, 'kg'), acucar = In('Açúcar', 4.79, 1, 'kg'), choc = In('Chocolate em pó', 8.9, 200, 'g');
-  const R = (nome, categoria, rendimento, rendUnid, itens) => { const o = {id:uid(), nome, categoria, rendimento, rendUnid, itens:itens.map(([insumoId, qtd, unidade]) => ({insumoId, qtd, unidade}))}; save('receitas', o); return o; };
-  const cx = R('Coxinha de frango', 'Salgados', 100, 'salgados', [[trigo,1,'kg'],[frango,1,'kg'],[leite,1,'L'],[marg,100,'g'],[oleo,900,'ml'],[rosca,500,'g'],[ovos,3,'un']]);
-  const ch = R('Churrasco', 'Churrasco', 20, 'pessoas', [[alcatra,4,'kg'],[ling,2,'kg'],[carvao,6,'kg'],[sal,300,'g']]);
-  const fa = R('Farofa', 'Acompanhamentos', 20, 'porções', [[mand,1,'kg'],[marg,200,'g'],[ling,300,'g'],[ovos,4,'un']]);
-  const ar = R('Arroz branco', 'Acompanhamentos', 20, 'porções', [[arroz,2,'kg'],[oleo,100,'ml']]);
-  const bo = R('Bolo de chocolate', 'Bolos e doces', 16, 'fatias', [[trigo,300,'g'],[acucar,300,'g'],[choc,100,'g'],[ovos,4,'un'],[leite,240,'ml'],[oleo,120,'ml']]);
+  const R = (nome, categoria, rendimento, rendUnid, itens, preco = 0) => { const o = {id:uid(), nome, categoria, rendimento, rendUnid, preco, itens:itens.map(([insumoId, qtd, unidade]) => ({insumoId, qtd, unidade}))}; save('receitas', o); return o; };
+  const cx = R('Coxinha de frango', 'Salgados', 100, 'salgados', [[trigo,1,'kg'],[frango,1,'kg'],[leite,1,'L'],[marg,100,'g'],[oleo,900,'ml'],[rosca,500,'g'],[ovos,3,'un']], 0.9);
+  const ch = R('Churrasco', 'Churrasco', 20, 'pessoas', [[alcatra,4,'kg'],[ling,2,'kg'],[carvao,6,'kg'],[sal,300,'g']], 18);
+  const fa = R('Farofa', 'Acompanhamentos', 20, 'porções', [[mand,1,'kg'],[marg,200,'g'],[ling,300,'g'],[ovos,4,'un']], 2.5);
+  const ar = R('Arroz branco', 'Acompanhamentos', 20, 'porções', [[arroz,2,'kg'],[oleo,100,'ml']], 1.5);
+  const bo = R('Bolo de chocolate', 'Bolos e doces', 16, 'fatias', [[trigo,300,'g'],[acucar,300,'g'],[choc,100,'g'],[ovos,4,'un'],[leite,240,'ml'],[oleo,120,'ml']], 4.5);
   const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 2) % 7));
   [[150, 3000, 250], [120, 2450, 200], [160, 3300, 260]].forEach(([p, rec, ex], k) => {
     const dt = new Date(d); dt.setDate(d.getDate() - 7 * k);
@@ -1067,10 +1112,18 @@ const ACT = {
   tema: b => { aplicarTema(b.dataset.v); openAjustes(); },
   fechar: () => closeDlg(),
   addLinha: b => { FORMS[b.dataset.f]().linhas.push({receitaId:'', qtd:''}); render(); },
-  rmLinha: b => { const f = FORMS[b.dataset.f](); f.linhas.splice(+b.dataset.i, 1); if (!f.linhas.length) f.linhas.push({receitaId:'', qtd:''}); render(); },
+  rmLinha: b => { const f = FORMS[b.dataset.f](); f.linhas.splice(+b.dataset.i, 1); if (!f.linhas.length) f.linhas.push({receitaId:'', qtd:''}); if (b.dataset.f === 'lan') autoTotalLan(); render(); },
   margem: b => { ORC.margem = b.dataset.v; render(); },
+  orcModo: b => { const m = margemOrc(); ORC.modo = b.dataset.v;
+    if (ORC.modo === 'valor' && !num(ORC.lucroValor)){ const c = calcLinhas(ORC.linhas).custo + num(ORC.extras); if (c) ORC.lucroValor = moneyStr(r2(c / (1 - m) - c)); }
+    if (ORC.modo === 'pct') ORC.margem = String(Math.round(m * 10000) / 100).replace('.', ',');
+    render(); },
+  orcTabela: () => { const c = calcLinhas(ORC.linhas), custo = c.custo + num(ORC.extras), tab = c.detalhes.reduce((a, d) => a + (d.venda || 0), 0);
+    ORC.modo = 'valor'; ORC.lucroValor = moneyStr(r2(Math.max(tab - custo, 0))); render(); toast('Lucro ajustado ao preço de tabela', 'ok'); },
+  lanAuto: () => { LAN.manual = false; autoTotalLan(); render(); },
+  rfSug: b => { RF.preco = moneyStr(num(b.dataset.v)); renderRf(); },
   orcParaLan: () => { const c = calcLinhas(ORC.linhas), ex = num(ORC.extras);
-    LAN = {...novoLan(), linhas:clean(ORC.linhas.filter(l => l.receitaId)), extras:ORC.extras, recebido:inStr((c.custo + ex) / (1 - margemOrc()))};
+    LAN = {...novoLan(), linhas:clean(ORC.linhas.filter(l => l.receitaId)), extras:ORC.extras, recebido:moneyStr(r2((c.custo + ex) / (1 - margemOrc()))), manual:true};
     TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
   orcCliente: () => novoOrcCliente(),
   abrirOrc: b => abrirOrc(b.dataset.id),
@@ -1082,7 +1135,7 @@ const ACT = {
   qWhats: () => enviarTexto(),
   qVenda: () => { const o = qSalvar('aprovado'); if (!o) return;
     const receitas = o.itens.filter(i => S.receitas[i.receitaId]);
-    LAN = {...novoLan(), data:o.dataEvento || hoje(), descricao:'Pedido de ' + (o.cliente || 'cliente'), linhas:receitas.length ? receitas.map(i => ({receitaId:i.receitaId, qtd:inStr(i.qtd)})) : [{receitaId:'', qtd:''}], extras:inStr(o.extras || ''), recebido:inStr(o.total), orcId:o.id};
+    LAN = {...novoLan(), data:o.dataEvento || hoje(), descricao:'Pedido de ' + (o.cliente || 'cliente'), linhas:receitas.length ? receitas.map(i => ({receitaId:i.receitaId, qtd:inStr(i.qtd)})) : [{receitaId:'', qtd:''}], extras:inStr(o.extras || ''), recebido:moneyStr(o.total), manual:true, orcId:o.id};
     closeDlg(); TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira como foi pago e salve', ''); },
   qDel: async () => { if (await askConfirm('Excluir este orçamento?', 'Excluir')){ remove('orcamentos', Q.id); closeDlg(); render(); toast('Orçamento excluído'); } },
   salvarLan: () => {
@@ -1137,7 +1190,7 @@ const ACT = {
     let cat = RF.categoria;
     if (cat === '__nova'){ const nome = (RF.novaCat || '').trim(); if (!nome) return toast('Dê um nome à nova categoria');
       cat = acharCat(nome) || nome; if (!acharCat(nome)) salvarListaCat([...categorias(), nome]); }
-    save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:cat, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens}); closeDlg(); render(); toast('Receita salva'); },
+    save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:cat, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens, preco:r2(num(RF.preco))}); closeDlg(); render(); toast('Receita salva'); },
   categorias: () => { const l = categorias(); CATS = {lista:[...l], orig:[...l], nova:''}; renderCats(); },
   catAdd: () => { const n = (CATS.nova || '').trim(); if (!n) return toast('Digite o nome da categoria');
     if (CATS.lista.some(c => c && c.trim().toLowerCase() === n.toLowerCase())) return toast('Não dá: essa categoria já existe');
@@ -1183,10 +1236,14 @@ function bind(t){
   for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
   o[parts.at(-1)] = t.value;
   if (f === 'rf' && parts[0] === 'itens' && parts[2] === 'insumoId'){ const ins = S.insumos[t.value]; if (ins) o.unidade = FAM_UNITS[UNITS[ins.unidade].f][0]; }
-  if (f === 'orc'){ $('#orc-result').innerHTML = orcResult(); if (parts[0] === 'margem') document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.v === t.value)); }
-  if (f === 'lan'){ $('#lan-result').innerHTML = lanResult(); const ph = $('#lan-pag-hint'); if (ph) ph.innerHTML = pagHint(); }
+  if (f === 'orc'){ $('#orc-result').innerHTML = orcResult(); const mh = $('#orc-modo-hint'); if (mh) mh.innerHTML = orcModoHint(); if (parts[0] === 'margem') document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.v === t.value)); }
+  if (f === 'lan'){
+    if (parts[0] === 'recebido') LAN.manual = !!t.value;
+    if (parts[0] === 'linhas'){ autoTotalLan(); const li = $('#lan-info-' + parts[1]); if (li) li.innerHTML = lanInfo(LAN.linhas[+parts[1]]); }
+    const th = $('#lan-total-hint'); if (th) th.innerHTML = lanTotalHint();
+    $('#lan-result').innerHTML = lanResult(); const ph = $('#lan-pag-hint'); if (ph) ph.innerHTML = pagHint(); }
   if (f === 'ins') $('#ins-prev').innerHTML = insPrev();
-  if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); }
+  if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); const ph = $('#rf-preco-hint'); if (ph) ph.innerHTML = rfPrecoHint(); }
   if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
 }
 document.addEventListener('input', e => {
