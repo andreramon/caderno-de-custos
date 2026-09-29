@@ -152,6 +152,7 @@ details.compras li{margin:5px 0}
 .item:active{background:var(--bg)}
 .item b{display:block;font-weight:800}
 .item small{color:var(--muted);display:block}
+.item small.negt,.item .val.negt small.negt{color:var(--neg)}.item small.pos{color:var(--lucro)}
 .item .val{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .warn{color:var(--neg);font-size:.84rem;font-weight:800}
 .pos{color:var(--lucro)}.negt{color:var(--neg)}
@@ -160,6 +161,16 @@ details.compras li{margin:5px 0}
 .st.rascunho{background:var(--bg);color:var(--muted)}
 .st.enviado{background:var(--manga-soft);color:var(--manga-ink)}
 .st.aprovado{background:var(--lucro-soft);color:var(--lucro)}
+.st.alta{background:var(--neg-soft);color:var(--neg)}
+.st.baixa{background:var(--lucro-soft);color:var(--lucro)}
+.pr-row{display:grid;grid-template-columns:1fr 150px;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.pr-row:last-child{border-bottom:0}
+.pr-row b{display:block}.pr-row small{color:var(--muted);display:block;font-size:.84rem}
+.pr-var{grid-column:1/-1;font-size:.84rem;font-weight:700;margin-top:-4px}
+.hist{width:100%;border-collapse:collapse;font-size:.9rem}
+.hist td{padding:7px 0;border-bottom:1px solid var(--line)}
+.hist td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.hist tr:last-child td{border-bottom:0}
 :root[data-theme="dark"] .st.enviado{color:var(--manga)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .st.enviado{color:var(--manga)}}
 
@@ -475,10 +486,31 @@ function aplicarTema(t){
   const escuro = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.querySelector('meta[name="theme-color"]').content = escuro ? '#2A0D45' : '#6A1B9A';
 }
-function margemOrc(){
-  if (ORC.modo === 'valor'){ const c = calcLinhas(ORC.linhas).custo + num(ORC.extras), lv = Math.max(num(ORC.lucroValor), 0); return c + lv > 0 ? Math.min(lv / (c + lv), .95) : 0; }
-  return Math.min(Math.max(num(ORC.margem) / 100, 0), .95);
+/* Despesas no preço (rateio): despesas fixas por mês ÷ vendas médias por mês = % de cada venda que paga as contas do negócio. */
+function fixasDoMes(ym){ return despesasMes(ym).filter(x => x.d.tipo !== 'avulsa').reduce((a, x) => a + x.valor, 0); }
+function baseRateio(){
+  const atual = hoje().slice(0, 7), meses = []; let vend = 0, ym = prevYM(atual);
+  for (let k = 0; k < 6 && meses.length < 3; k++){ const f = resumoMes(ym).fat; if (f > 0){ meses.push(ym); vend += f; } ym = prevYM(ym); }
+  let parcial = false; if (!meses.length){ const f = resumoMes(atual).fat; if (f > 0){ meses.push(atual); vend = f; parcial = true; } }
+  const fixas = fixasDoMes(atual), media = meses.length ? vend / meses.length : 0;
+  return {fixas, media, meses, parcial, taxa: media ? Math.min(fixas / media, .6) : 0};
 }
+function taxaDespesas(){
+  const cfg = (S.config && S.config.rateio) || {modo:'auto'};
+  if (cfg.modo === 'off') return {taxa:0, modo:'off'};
+  if (cfg.modo === 'manual') return {taxa:Math.min(Math.max(num(cfg.pct) / 100, 0), .6), modo:'manual'};
+  return {...baseRateio(), modo:'auto'};
+}
+// Markup divisor: preço = custo direto ÷ (1 − % despesas − % lucro). Em reais: preço = (custo direto + lucro) ÷ (1 − % despesas).
+function precoOrc(){
+  const c = calcLinhas(ORC.linhas), direto = c.custo + num(ORC.extras), t = taxaDespesas().taxa;
+  let preco, m;
+  if (ORC.modo === 'valor'){ const lv = Math.max(num(ORC.lucroValor), 0); preco = (direto + lv) / (1 - t); }
+  else { m = Math.min(Math.max(num(ORC.margem) / 100, 0), .95); preco = direto / Math.max(1 - m - t, .05); }
+  const rateio = preco * t, lucro = preco - direto - rateio;
+  return {c, direto, t, rateio, preco, lucro, m: preco ? lucro / preco : 0};
+}
+const margemOrc = () => precoOrc().m;
 
 /* ============ Estado dos formulários ============ */
 let TAB = 'ini', CAD = 'rec';
@@ -486,8 +518,8 @@ let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20', modo:'pct',
 const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje() });
 let LAN = novoLan();
 let REL = hoje().slice(0, 7);
-let RF = null, INS = null, Q = null, NEG = null, CATS = null, DP = null, BUSCA = '';
-const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS, dp:() => DP };
+let RF = null, INS = null, Q = null, NEG = null, CATS = null, DP = null, RT = null, PR = null, MT = null, BUSCA = '';
+const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS, dp:() => DP, rt:() => RT, pr:() => PR, mt:() => MT };
 
 /* ============ Ícones ============ */
 const ic = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -590,8 +622,12 @@ const VIEWS = {
       <button class="tile t1" data-act="tab" data-id="orc"><span class="ti">${ic(I.orc)}</span><b>Novo orçamento</b></button>
       <button class="tile t2" data-act="tab" data-id="lan"><span class="ti">${ic(I.lan, 2.6)}</span><b>Lançar venda</b></button>
       <button class="tile t3" data-act="tab" data-id="rel"><span class="ti">${ic(I.rel)}</span><b>Ver relatório</b></button>
-      <button class="tile t4" data-act="irInsumos"><span class="ti">${ic(I.ins)}</span><b>Atualizar preço de insumo</b></button>
+      <button class="tile t4" data-act="precos"><span class="ti">${ic(I.ins)}</span><b>Atualizar preços do mercado</b></button>
     </div>
+    ${(() => { const ab = receitasAbaixo(), pa = insumosParados();
+      if (ab.length) return `<div class="banner" style="margin-top:12px;background:var(--neg-soft);border-color:var(--neg)"><span>${ab.length} receita${ab.length > 1 ? 's estão' : ' está'} abaixo da meta de ${pct(metaLucro())} de lucro livre.</span><button data-act="irReceitas">Ver</button></div>`;
+      if (pa.length) return `<div class="banner" style="margin-top:12px"><span>${pa.length} insumo${pa.length > 1 ? 's' : ''} sem atualizar preço há mais de 60 dias.</span><button data-act="precos">Atualizar</button></div>`;
+      return ''; })()}
     ${!neg.nome ? `<div class="banner" style="margin-top:12px"><span>Coloque o nome do seu negócio para sair nos orçamentos.</span><button data-act="ajustes">Colocar</button></div>` : ''}
     ${(() => { const ar = aReceber(); if (!ar.length) return ''; const tot = ar.reduce((a, x) => a + num(x.p.valor), 0);
       return `<p class="group-title">A receber: ${brl(tot)}</p><div class="list">${ar.slice(0, 5).map(pendItem).join('')}</div>`; })()}
@@ -604,13 +640,14 @@ const VIEWS = {
     return head + `
     <div class="panel"><div class="step"><b>1</b><h3>O que o cliente quer</h3></div>${linhasHTML('orc', ORC.linhas)}</div>
     <div class="panel"><div class="step"><b>2</b><h3>Custos extras e lucro</h3></div>
-      <label class="field"><span>Gás, entrega, ajudante, embalagem avulsa</span><div class="prefix"><input inputmode="decimal" data-bind="orc.extras" value="${esc(ORC.extras)}" placeholder="0,00"></div></label>
+      <label class="field" style="margin-bottom:6px"><span>Custos só deste pedido (entrega, ajudante, embalagem especial)</span><div class="prefix"><input inputmode="decimal" data-bind="orc.extras" value="${esc(ORC.extras)}" placeholder="0,00"></div></label>
+      <p class="hint" style="margin:0 0 14px">${(() => { const tx = taxaDespesas(); return tx.modo === 'off' ? 'As despesas do negócio não estão entrando no preço.' : tx.taxa ? `As despesas do negócio (gás, luz, transporte…) já entram no preço: <b>${pct(tx.taxa)}</b> de cada venda.` : 'Cadastre as despesas do mês no Relatório para elas entrarem no preço.'; })()} <button class="linkbtn" data-act="rateio">Ajustar</button></p>
       <div class="field"><span>Como você quer definir o seu lucro</span>
         <div class="seg" role="group" aria-label="Tipo de lucro" style="background:var(--bg);margin:2px 0 4px"><button data-act="orcModo" data-v="pct" aria-pressed="${ORC.modo !== 'valor'}">Em %</button><button data-act="orcModo" data-v="valor" aria-pressed="${ORC.modo === 'valor'}">Em reais</button></div></div>
       ${ORC.modo === 'valor' ? `
       <label class="field"><span>Quanto você quer ganhar neste pedido</span><div class="prefix"><input inputmode="decimal" data-bind="orc.lucroValor" value="${esc(ORC.lucroValor)}" placeholder="0,00"></div></label>
       <p class="hint" id="orc-modo-hint" style="margin:0">${orcModoHint()}</p>` : `
-      <div class="field"><span>Quanto você quer ganhar sobre o valor cobrado</span>
+      <div class="field"><span>Quanto você quer ganhar livre, sobre o valor cobrado</span>
         <div class="chips">${ms.map(m => `<button class="chip" data-act="margem" data-v="${m}" aria-pressed="${ORC.margem === m}">${m}%</button>`).join('')}</div></div>
       <label class="field"><span>Ou digite outra porcentagem</span><input inputmode="decimal" data-bind="orc.margem" value="${esc(ORC.margem)}"></label>
       <p class="hint" id="orc-modo-hint" style="margin:0">${orcModoHint()}</p>`}
@@ -669,6 +706,12 @@ const VIEWS = {
     <p class="group-title">Despesas do mês${totDesp ? ': ' + brl(totDesp) : ''}</p>
     ${desp.length ? `<div class="list">${desp.map(despItem).join('')}</div>` : `<div class="panel"><p class="hint">Cadastre gás, luz, água, transporte, internet e outras contas do negócio para ver quanto sobra de verdade.</p></div>`}
     <button class="btn ghost wide no-print" data-act="novaDesp">Adicionar despesa</button>
+    ${(() => { const tx = taxaDespesas(), real = fat ? totDesp / fat : null;
+      return `<div class="panel" style="margin-top:14px"><h3>Despesas no preço dos produtos</h3>
+      <p>${tx.modo === 'off' ? 'Seus preços sugeridos <b>não incluem</b> as despesas do negócio.' : `Seus preços sugeridos incluem <b>${pct(tx.taxa)}</b> para pagar as despesas.`}${real != null ? ` Neste mês, as despesas pesaram <b>${pct(real)}</b> do que entrou.` : ''}</p>
+      ${real != null && real > tx.taxa + .01 ? '<p class="warn" style="margin-top:6px">As despesas estão maiores do que os preços cobrem. Vale revisar os preços ou o percentual.</p>' : ''}
+      ${real != null && tx.modo !== 'off' && real <= tx.taxa + .01 ? '<p class="pos" style="margin-top:6px;font-weight:700">Os preços estão cobrindo as despesas do mês.</p>' : ''}
+      <div class="btns no-print"><button class="btn small" data-act="rateio">Ajustar percentual</button></div></div>`; })()}
     ${lista.length || desp.length ? `<div class="btns no-print" style="margin-top:14px"><button class="btn primary wide" data-act="relPDF">${ic(I.share)}Gerar PDF do relatório</button></div>` : ''}`;
   },
   cad(){
@@ -684,20 +727,92 @@ function recView(){
   return `<div class="btns" style="margin-top:0"><button class="btn primary" style="flex:2" data-act="novaReceita">Nova receita</button><button class="btn" style="flex:1" data-act="categorias">Categorias</button></div>
   ${categorias().filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
     return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
-    <span class="val">${num(r.preco) ? `${brl(num(r.preco))}<small>custa ${brl(cr.unit)}</small><small class="pos">lucro ${pct((num(r.preco) - cr.unit) / num(r.preco))}</small>` : `${brl(cr.unit)}<small>custo de cada</small><span class="st rascunho">Sem preço de venda</span>`}</span></button>`; }).join('')}</div>`).join('')}`;
+    <span class="val">${num(r.preco) ? `${brl(num(r.preco))}<small>custa ${brl(cr.unit)}</small>${(() => { const pr = num(r.preco), l = (pr - cr.unit - pr * taxaDespesas().taxa) / pr; return `<small class="${l < metaLucro() ? 'negt' : 'pos'}">lucro livre ${pct(l)}</small>${l < metaLucro() ? '<span class="st alta">Abaixo da meta</span>' : ''}`; })()}` : `${brl(cr.unit)}<small>custo de cada</small><span class="st rascunho">Sem preço de venda</span>`}</span></button>`; }).join('')}</div>`).join('')}`;
 }
 function insView(){
   const todos = Object.values(S.insumos).sort((a,b) => a.nome.localeCompare(b.nome));
   if (!todos.length) return vazioReceitas();
   const b = BUSCA.trim().toLowerCase(); const lista = b ? todos.filter(i => i.nome.toLowerCase().includes(b)) : todos;
   return `<input type="search" data-bind="busca" value="${esc(BUSCA)}" placeholder="Buscar insumo" aria-label="Buscar insumo" style="margin-bottom:10px;background:var(--card)">
-  <button class="btn primary wide" data-act="novoInsumo" style="margin-bottom:14px">Novo insumo</button>
+  <div class="btns" style="margin:0 0 14px"><button class="btn manga" style="flex:3" data-act="precos">Atualizar preços</button><button class="btn primary" style="flex:2" data-act="novoInsumo">Novo insumo</button></div>
+  ${(() => { const n = insumosParados().length; return n ? `<p class="hint" style="margin:-4px 2px 12px">${n} insumo${n > 1 ? 's estão' : ' está'} sem atualizar há mais de 60 dias.</p>` : ''; })()}
   <div class="list" id="ins-list">${insLista(lista)}</div>`;
 }
 const insLista = lista => lista.length ? lista.map(i => { const u = UNITS[i.unidade]; const cb = custoBaseInsumo(i);
   const ref = u.f === 'g' ? brl(cb * 1000) + '/kg' : u.f === 'ml' ? brl(cb * 1000) + '/litro' : brl(cb) + '/un';
-  return `<button class="item" data-act="editInsumo" data-id="${i.id}"><span><b>${esc(i.nome)}</b><small>${brl(num(i.preco))} a embalagem de ${fq(num(i.qtd))} ${u.l}${num(i.qtd) > 1 && u.f === 'un' ? 's' : ''}</small></span><span class="val">${ref}</span></button>`; }).join('')
+  return `<button class="item" data-act="editInsumo" data-id="${i.id}"><span><b>${esc(i.nome)}</b><small>${brl(num(i.preco))} a embalagem de ${fq(num(i.qtd))} ${u.l}${num(i.qtd) > 1 && u.f === 'un' ? 's' : ''}</small>${badgeInsumo(i)}</span><span class="val">${ref}</span></button>`; }).join('')
   : '<p class="hint" style="padding:14px 18px">Nenhum insumo com esse nome.</p>';
+/* ===== Histórico de preços e alertas ===== */
+const refUnid = i => { const f = UNITS[i.unidade]?.f; return f === 'g' ? 'kg' : f === 'ml' ? 'litro' : 'un'; };
+const refPreco = i => { const f = UNITS[i.unidade]?.f, cb = custoBaseInsumo(i); return f === 'un' ? cb : cb * 1000; };
+const diasDesde = d => d ? Math.floor((new Date(hoje() + 'T12:00') - new Date(d + 'T12:00')) / 864e5) : null;
+function historicoDe(i){ return Array.isArray(i.historico) ? i.historico : []; }
+function ultimaAtualizacao(i){ const h = historicoDe(i); return h.length ? h[h.length - 1].data : (i.precoEm || (i.atualizadoEm || '').slice(0, 10) || null); }
+function ultimaVariacao(i){ const h = historicoDe(i); if (h.length < 2) return null; const a = h[h.length - 2], b = h[h.length - 1]; return a.ref ? {v:b.ref / a.ref - 1, data:b.data} : null; }
+// Registra um novo preço no histórico (guarda também o preço antigo, se for o primeiro registro).
+function registrarPreco(antigo, novo){
+  const o = {...clean(antigo || {}), ...novo}; const h = historicoDe(antigo || {}).slice();
+  const mudou = !antigo || num(antigo.preco) !== num(o.preco) || num(antigo.qtd) !== num(o.qtd) || antigo.unidade !== o.unidade;
+  if (!mudou){ o.historico = h; return o; }
+  if (antigo && !h.length) h.push({data:ultimaAtualizacao(antigo) || hoje(), preco:num(antigo.preco), qtd:num(antigo.qtd), unidade:antigo.unidade, ref:r2(refPreco(antigo) * 10000) / 10000});
+  h.push({data:hoje(), preco:num(o.preco), qtd:num(o.qtd), unidade:o.unidade, ref:r2(refPreco(o) * 10000) / 10000});
+  o.historico = h.slice(-24); o.precoEm = hoje(); return o;
+}
+const metaLucro = () => (S.config && S.config.metas && S.config.metas.lucroMin != null ? num(S.config.metas.lucroMin) : 20) / 100;
+function lucroLivreReceita(r){ const pr = num(r.preco); if (!pr) return null; const cu = custoReceita(r).unit; return (pr - cu - pr * taxaDespesas().taxa) / pr; }
+const receitasAbaixo = () => Object.values(S.receitas).filter(r => { const l = lucroLivreReceita(r); return l != null && l < metaLucro() - 1e-9; });
+const insumosParados = () => Object.values(S.insumos).filter(i => { const d = diasDesde(ultimaAtualizacao(i)); return d != null && d > 60; });
+function badgeInsumo(i){
+  const v = ultimaVariacao(i), d = diasDesde(ultimaAtualizacao(i));
+  if (d != null && d > 60) return `<span class="st rascunho">Sem atualizar há ${d} dias</span>`;
+  if (v && Math.abs(v.v) >= .01 && diasDesde(v.data) <= 45) return `<span class="st ${v.v > 0 ? 'alta' : 'baixa'}">${v.v > 0 ? 'Subiu' : 'Caiu'} ${pct(Math.abs(v.v))} em ${dataCurta(v.data)}</span>`;
+  return '';
+}
+// Compara as receitas antes e depois de uma mudança de preços e mostra o impacto.
+function fotoReceitas(){ const m = {}; Object.values(S.receitas).forEach(r => { m[r.id] = {cu:custoReceita(r).unit, l:lucroLivreReceita(r)}; }); return m; }
+function mostrarImpacto(mudancas, antes){
+  const depois = fotoReceitas(), meta = metaLucro();
+  const afetadas = Object.values(S.receitas).filter(r => antes[r.id] && Math.abs(depois[r.id].cu - antes[r.id].cu) > 1e-6)
+    .sort((a, b) => ((depois[a.id].l ?? 1) - (depois[b.id].l ?? 1)));
+  if (!afetadas.length){ toast(mudancas.length > 1 ? `${mudancas.length} preços salvos` : 'Preço salvo', 'ok'); return; }
+  const abaixo = afetadas.filter(r => depois[r.id].l != null && depois[r.id].l < meta);
+  openDlg('impacto', `<div class="dlg">${dlgHead('Preços atualizados')}
+  <div class="dlg-body">
+    ${abaixo.length ? `<div class="banner" style="background:var(--neg-soft);border-color:var(--neg)"><span>${abaixo.length} receita${abaixo.length > 1 ? 's ficaram' : ' ficou'} abaixo da sua meta de ${pct(meta)} de lucro livre.</span></div>` : `<div class="banner" style="background:var(--lucro-soft);border-color:var(--lucro)"><span>Todas as receitas com preço continuam dentro da meta de ${pct(meta)}.</span></div>`}
+    <h3 style="margin:4px 0 8px">O que mudou</h3>
+    <div class="list" style="background:var(--bg)">${mudancas.map(m => `<div class="item" style="cursor:default"><span><b>${esc(m.nome)}</b><small>${brl(m.de)} → ${brl(m.para)} por ${m.unid}</small></span><span class="val ${m.v > 0 ? 'negt' : 'pos'}">${m.v > 0 ? '+' : ''}${pct(m.v)}</span></div>`).join('')}</div>
+    <h3 style="margin:16px 0 8px">Impacto nas receitas</h3>
+    <div class="list" style="background:var(--bg)">${afetadas.map(r => { const a = antes[r.id], d = depois[r.id], baixo = d.l != null && d.l < meta;
+      return `<div class="item" style="cursor:default;flex-wrap:wrap"><span><b>${esc(r.nome)}</b><small>Custo de cada: ${brl(a.cu)} → ${brl(d.cu)}</small>
+        ${d.l == null ? '<span class="st rascunho">Sem preço de venda</span>' : `<small class="${baixo ? 'negt' : 'pos'}" style="font-weight:800">Lucro livre: ${pct(a.l)} → ${pct(d.l)}</small>`}</span>
+        ${baixo ? `<button class="btn small manga" data-act="editReceita" data-id="${r.id}">Ajustar preço</button>` : ''}</div>`; }).join('')}</div>
+    <p class="hint" style="margin-top:10px">A meta de lucro livre pode ser mudada em Ajustes.</p>
+  </div>
+  <div class="dlg-foot"><button class="btn primary" data-act="fechar">Entendi</button></div></div>`);
+}
+function openPrecos(){ PR = {busca:'', vals:{}}; Object.values(S.insumos).forEach(i => PR.vals[i.id] = moneyStr(num(i.preco))); renderPrecos(); }
+function prLinhas(){
+  const b = PR.busca.trim().toLowerCase();
+  const lista = Object.values(S.insumos).filter(i => !b || i.nome.toLowerCase().includes(b)).sort((a, c) => a.nome.localeCompare(c.nome));
+  if (!lista.length) return '<p class="hint" style="padding:12px 0">Nenhum insumo com esse nome.</p>';
+  return lista.map(i => { const u = UNITS[i.unidade], d = diasDesde(ultimaAtualizacao(i));
+    return `<div class="pr-row"><span><b>${esc(i.nome)}</b><small>Embalagem de ${fq(num(i.qtd))} ${u.l}${num(i.qtd) > 1 && u.f === 'un' ? 's' : ''}. Era ${brl(num(i.preco))}${d == null ? '' : d === 0 ? ', atualizado hoje' : `, há ${d} dia${d === 1 ? '' : 's'}`}.</small></span>
+      <div class="prefix"><input inputmode="decimal" data-bind="pr.vals.${i.id}" value="${esc(PR.vals[i.id] || '')}" aria-label="Novo preço de ${esc(i.nome)}"></div>
+      <p class="pr-var" id="pr-v-${i.id}">${prVar(i)}</p></div>`; }).join('');
+}
+function prVar(i){ const n = num(PR.vals[i.id]), a = num(i.preco); if (!n || Math.abs(n - a) < .005) return ''; const v = n / a - 1;
+  return `<span class="${v > 0 ? 'negt' : 'pos'}">${v > 0 ? 'Subiu' : 'Caiu'} ${pct(Math.abs(v))}</span>`; }
+const prAlterados = () => Object.values(S.insumos).filter(i => { const n = num(PR.vals[i.id]); return n > 0 && Math.abs(n - num(i.preco)) >= .005; });
+function renderPrecos(){
+  openDlg('precos', `<div class="dlg">${dlgHead('Atualizar preços')}
+  <div class="dlg-body">
+    <p class="hint" style="margin-bottom:10px">Digite o preço novo da embalagem só dos itens que mudaram. O tamanho da embalagem continua o mesmo; para mudar, edite o insumo.</p>
+    <input type="search" data-bind="pr.busca" value="${esc(PR.busca)}" placeholder="Buscar insumo" aria-label="Buscar insumo" style="margin-bottom:4px">
+    <div id="pr-list">${prLinhas()}</div>
+  </div>
+  <div class="dlg-foot"><button class="btn primary" data-act="prSalvar" id="pr-btn">${prBtn()}</button></div></div>`, true);
+}
+const prBtn = () => { const n = prAlterados().length; return n ? `Salvar ${n} preço${n > 1 ? 's' : ''}` : 'Nenhum preço alterado'; };
 function lanItem(l){
   const c = custoTotal(l), f = num(l.faturamento), lu = f - c;
   const falta = pagamentosDe(l).filter(p => !p.recebido).reduce((a, p) => a + num(p.valor), 0);
@@ -705,30 +820,33 @@ function lanItem(l){
 }
 
 function orcModoHint(){
-  const c = calcLinhas(ORC.linhas); if (!c.detalhes.length) return '';
-  const custo = c.custo + num(ORC.extras), m = margemOrc(), preco = custo / (1 - m), lucro = preco - custo;
-  if (ORC.modo === 'valor') return num(ORC.lucroValor) ? `Isso dá ${pct(m)} do valor cobrado (${pct(custo ? lucro / custo : 0)} em cima do custo).` : 'Digite quanto você quer ganhar e o preço aparece embaixo.';
-  return `Você ganha ${brl(lucro)} neste pedido.`;
+  const P = precoOrc(); if (!P.c.detalhes.length) return '';
+  if (ORC.modo === 'valor') return num(ORC.lucroValor) ? `Isso dá ${pct(P.m)} do valor cobrado, já livre das despesas.` : 'Digite quanto você quer ganhar livre e o preço aparece embaixo.';
+  if (1 - num(ORC.margem) / 100 - P.t < .05) return '<span class="warn">Lucro mais despesas passam de 95% do preço. Diminua a porcentagem.</span>';
+  return `Você ganha ${brl(P.lucro)} livre neste pedido.`;
 }
 function orcResult(){
   const c = calcLinhas(ORC.linhas);
   if (!c.detalhes.length) return '<div class="panel"><p class="hint">Escolha uma receita e a quantidade para ver o preço.</p></div>';
-  const extras = num(ORC.extras), custo = c.custo + extras, m = margemOrc();
-  const preco = custo / (1 - m), lucro = preco - custo;
+  const P = precoOrc(), extras = num(ORC.extras), custo = P.direto, m = P.m, preco = P.preco, lucro = P.lucro;
   const compras = Object.entries(c.compras).map(([id, q]) => { const i = S.insumos[id]; if (!i) return ''; const u = UNITS[i.unidade]; const emb = num(i.qtd) * u.m; const n = emb ? Math.ceil(q / emb - 1e-9) : 0;
     return `<li><b>${esc(i.nome)}</b>: ${fmtBase(q, u.f)}${emb ? ` (${n} embalage${n > 1 ? 'ns' : 'm'} de ${fq(num(i.qtd))} ${i.unidade})` : ''}</li>`; }).join('');
   const falta = c.detalhes.some(d => d.falta);
   const temTab = c.detalhes.every(d => d.venda != null), tab = c.detalhes.reduce((a, d) => a + (d.venda || 0), 0);
-  const tabHTML = temTab ? `<div class="panel" style="padding:14px 18px"><p><b>Pelo seu preço de tabela: ${brl(tab)}</b></p><p class="hint">Lucro de ${brl(tab - custo)} (${pct(tab ? (tab - custo) / tab : 0)} do valor). <button class="linkbtn" data-act="orcTabela">Usar este lucro</button></p></div>` : '';
-  return `<div class="ticket"><span class="ticket-label">Cobre</span><strong class="ticket-price">${brl(preco)}</strong><span class="ticket-sub">e você ganha ${brl(lucro)}, que são ${pct(m)} do valor</span></div>
+  const lTab = tab - custo - tab * P.t;
+  const tabHTML = temTab ? `<div class="panel" style="padding:14px 18px"><p><b>Pelo seu preço de tabela: ${brl(tab)}</b></p><p class="hint">Lucro livre de ${brl(lTab)} (${pct(tab ? lTab / tab : 0)} do valor). <button class="linkbtn" data-act="orcTabela">Usar este preço</button></p></div>` : '';
+  return `<div class="ticket"><span class="ticket-label">Cobre</span><strong class="ticket-price">${brl(preco)}</strong><span class="ticket-sub">e você ganha ${brl(lucro)} livre, ${pct(m)} do valor</span></div>
   ${tabHTML}
   ${falta ? '<p class="warn" style="margin-bottom:10px">Alguma receita tem ingrediente sem preço, então o custo pode estar menor do que é.</p>' : ''}
   <div class="btns stack" style="margin:0 0 14px"><button class="btn primary wide" data-act="orcCliente">${ic(I.doc)}Fazer orçamento para o cliente</button>
   <button class="btn wide" data-act="orcParaLan">Lançar direto como venda</button></div>
-  <div class="panel"><h3>Custos (só você vê)</h3><dl class="resumo">
+  <div class="panel"><h3>Como o preço foi formado (só você vê)</h3><dl class="resumo">
     ${c.detalhes.map(d => `<div><dt>${esc(d.nome)}, ${fq(d.qtd)} ${esc(d.unid)}</dt><dd>${brl(d.custo)}</dd></div>`).join('')}
-    ${extras ? `<div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>` : ''}
-    <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div>
+    ${extras ? `<div><dt>Custos deste pedido</dt><dd>${brl(extras)}</dd></div>` : ''}
+    <div class="total"><dt>Custo de produção</dt><dd>${brl(custo)}</dd></div>
+    ${P.t ? `<div><dt>Despesas do negócio (${pct(P.t)})</dt><dd>${brl(P.rateio)}</dd></div>` : ''}
+    <div><dt>Seu lucro livre (${pct(m)})</dt><dd class="pos">${brl(lucro)}</dd></div>
+    <div class="total"><dt>Preço</dt><dd>${brl(preco)}</dd></div>
   </dl>
   <details class="compras"><summary>Lista de compras</summary><ul>${compras}</ul></details></div>`;
 }
@@ -736,10 +854,12 @@ function lanResult(){
   const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras, fat = num(LAN.recebido);
   if (!fat && !c.detalhes.length) return '';
   if (!fat) return `<div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div>${extras ? `<div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>` : ''}<div class="total"><dt>Custo desta venda</dt><dd>${brl(custo)}</dd></div></dl><p class="hint" style="margin-top:8px">Informe o valor da venda para ver o seu lucro.</p></div>`;
-  const lucro = fat - custo, m = fat ? lucro / fat : 0;
-  return `<div class="lucro-box ${lucro < 0 ? 'neg' : ''}"><span>${lucro < 0 ? 'Prejuízo' : 'Seu lucro'}</span><strong>${brl(lucro)}</strong><span>${fat ? pct(m) + ' do valor da venda' : 'Informe o valor da venda'}</span></div>
-  <div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
-  <div class="total"><dt>Custo total</dt><dd>${brl(custo)}</dd></div><div><dt>Valor da venda</dt><dd>${brl(fat)}</dd></div></dl></div>`;
+  const t = taxaDespesas().taxa, rateio = fat * t, lucro = fat - custo, livre = lucro - rateio;
+  return `<div class="lucro-box ${livre < 0 ? 'neg' : ''}"><span>${livre < 0 ? 'Prejuízo' : 'Seu lucro livre'}</span><strong>${brl(livre)}</strong><span>${pct(livre / fat)} do valor da venda${t ? ', já separando a parte das despesas' : ''}</span></div>
+  <div class="panel"><dl class="resumo"><div><dt>Valor da venda</dt><dd>${brl(fat)}</dd></div><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
+  <div class="total"><dt>Sobra depois da produção</dt><dd>${brl(lucro)}</dd></div>
+  ${t ? `<div><dt>Parte das despesas do negócio (${pct(t)})</dt><dd>${brl(rateio)}</dd></div><div class="total"><dt>Lucro livre</dt><dd>${brl(livre)}</dd></div>` : ''}</dl>
+  ${t ? '<p class="hint" style="margin-top:8px">No relatório, as despesas reais do mês são descontadas uma vez só, no "Sobrou no mês".</p>' : ''}</div>`;
 }
 function pagHint(){
   const h = hoje(), tot = num(LAN.recebido), mes = d => mesNome((d || h).slice(0, 7)).split(' ')[0].toLowerCase();
@@ -756,7 +876,7 @@ function pagHint(){
 /* ============ Diálogos ============ */
 const dlg = () => $('#dlg');
 function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; normMoney(d); if (!d.open) d.showModal(); }
-function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = DP = null; }
+function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = DP = RT = PR = MT = null; }
 dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
 function askConfirm(msg, ok = 'Confirmar'){
   return new Promise(res => { const c = $('#cfm');
@@ -776,6 +896,11 @@ function openInsumo(id){
     <div class="row"><label class="field"><span>Tamanho da embalagem</span><input inputmode="decimal" data-bind="ins.qtd" value="${esc(INS.qtd)}"></label>
     <label class="field"><span>Unidade</span><select data-bind="ins.unidade">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${INS.unidade === k ? 'selected' : ''}>${u.l}</option>`).join('')}</select></label></div>
     <p class="hint" id="ins-prev">${insPrev()}</p>
+    ${id ? (() => { const i = S.insumos[id], h = historicoDe(i).slice().reverse(), d = diasDesde(ultimaAtualizacao(i));
+      return `<h3 style="margin:18px 0 6px">Histórico de preço</h3>
+      ${d != null ? `<p class="hint" style="margin-bottom:6px">Última atualização ${d === 0 ? 'hoje' : `há ${d} dia${d === 1 ? '' : 's'}`}${d > 60 ? ' <span class="warn">(vale conferir)</span>' : ''}.</p>` : ''}
+      ${h.length ? `<table class="hist"><tbody>${h.slice(0, 8).map((x, k) => { const ant = h[k + 1], v = ant && ant.ref ? x.ref / ant.ref - 1 : null;
+        return `<tr><td>${dataBR(x.data)}</td><td>${brl(x.preco)}</td><td>${brl(x.ref)}/${refUnid(x)}</td><td class="${v == null ? '' : v > 0 ? 'negt' : 'pos'}" style="font-weight:700">${v == null || Math.abs(v) < .0005 ? '' : (v > 0 ? '+' : '') + pct(v)}</td></tr>`; }).join('')}</tbody></table>` : '<p class="hint">O histórico começa na próxima vez que o preço mudar.</p>'}`; })() : ''}
   </div>
   <div class="dlg-foot">${id ? `<button class="btn danger" data-act="delInsumo">Excluir</button>` : ''}<button class="btn primary" data-act="salvarInsumo">Salvar</button></div></div>`);
 }
@@ -831,6 +956,28 @@ function renderDesp(){
   </div>
   <div class="dlg-foot">${DP.id ? '<button class="btn danger" data-act="despDel">Excluir</button>' : ''}<button class="btn primary" data-act="despSalvar">Salvar</button></div></div>`);
 }
+function openRateio(){ const cfg = (S.config && S.config.rateio) || {modo:'auto'}; RT = {modo:cfg.modo || 'auto', pct:cfg.pct != null ? String(cfg.pct).replace('.', ',') : ''}; renderRateio(); }
+function renderRateio(){
+  const b = baseRateio(), nomes = b.meses.map(m => mesNome(m).split(' ')[0].toLowerCase()).reverse().join(', ');
+  const ex = RT.modo === 'manual' ? Math.min(num(RT.pct) / 100, .6) : RT.modo === 'off' ? 0 : b.taxa;
+  openDlg('rateio', `<div class="dlg">${dlgHead('Despesas no preço')}
+  <div class="dlg-body">
+    <p class="hint" style="margin-bottom:12px">Cada venda precisa pagar uma parte das contas do mês. Esse percentual entra no preço sugerido do Orçar e das receitas. No relatório, as despesas reais continuam descontadas uma vez só.</p>
+    <div class="seg" role="group" aria-label="Como calcular" style="background:var(--bg)">${[['auto','Automático'],['manual','Eu defino'],['off','Não incluir']].map(([v, l]) => `<button data-act="rtModo" data-v="${v}" aria-pressed="${RT.modo === v}">${l}</button>`).join('')}</div>
+    ${RT.modo === 'auto' ? `<div class="panel" style="background:var(--bg);margin:4px 0 10px"><dl class="resumo">
+        <div><dt>Despesas fixas por mês</dt><dd>${brl(b.fixas)}</dd></div>
+        <div><dt>Vendas médias por mês${nomes ? ` (${nomes})` : ''}</dt><dd>${b.media ? brl(b.media) : 'sem vendas'}</dd></div>
+        <div class="total"><dt>Parte de cada venda</dt><dd>${pct(b.taxa)}</dd></div></dl></div>
+      ${!b.fixas ? '<p class="warn">Cadastre as despesas fixas no Relatório para o cálculo funcionar.</p>' : ''}
+      ${b.fixas && !b.media ? '<p class="warn">Ainda não há vendas para calcular. Use "Eu defino" por enquanto.</p>' : ''}
+      ${b.parcial ? '<p class="hint">Calculado só com este mês, que ainda não terminou. Fica mais preciso a partir do mês que vem, com a média dos últimos 3 meses.</p>' : '<p class="hint">Usa as despesas fixas atuais e a média de vendas dos últimos meses fechados. Gastos de "só neste mês" ficam fora, porque não se repetem.</p>'}` : ''}
+    ${RT.modo === 'manual' ? `<label class="field" style="margin-top:6px"><span>Percentual de cada venda para as despesas</span><input inputmode="decimal" data-bind="rt.pct" value="${esc(RT.pct)}" placeholder="Ex.: 8"></label>
+      <p class="hint">${b.taxa ? `Pelo cálculo automático daria ${pct(b.taxa)}.` : ''}</p>` : ''}
+    ${RT.modo === 'off' ? '<p class="hint" style="margin-top:6px">O preço sugerido vai considerar só a produção e o lucro. Use apenas se já incluir as despesas no seu lucro por conta própria.</p>' : ''}
+    ${ex ? `<p style="margin-top:10px">Numa venda de <b>R$ 100,00</b>, <b id="rt-ex">${brl(100 * ex)}</b> ficam para pagar as despesas.</p>` : ''}
+  </div>
+  <div class="dlg-foot"><button class="btn primary" data-act="rtSalvar">Salvar</button></div></div>`);
+}
 function salvarListaCat(lista){ save('config', {id:'categorias', lista}); }
 function renderCats(){
   const qtd = nome => Object.values(S.receitas).filter(r => r.categoria === nome).length;
@@ -847,9 +994,12 @@ function renderCats(){
 }
 function rfPrecoHint(){
   const cu = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))}).unit; if (!num(RF.rendimento) || !cu) return 'Monte os ingredientes para ver a sugestão de preço.';
-  const p = num(RF.preco), sug = roundNice(cu / .7);
-  if (!p) return `Sugestão para ganhar 30%: ${brl(sug)} cada. <button class="linkbtn" data-act="rfSug" data-v="${sug}">Usar</button>`;
-  const l = p - cu; return l < 0 ? `<span class="warn">Esse preço fica abaixo do custo (${brl(cu)} cada).</span>` : `Você ganha ${brl(l)} em cada, ${pct(l / p)} do preço.`;
+  const t = taxaDespesas().taxa, p = num(RF.preco), sug = roundNice(cu / Math.max(1 - .3 - t, .05));
+  const td = t ? ` e ${pct(t)} de despesas do negócio` : '';
+  if (!p) return `Sugestão para ganhar 30% livre${td}: ${brl(sug)} cada. <button class="linkbtn" data-act="rfSug" data-v="${sug}">Usar</button>`;
+  const l = p - cu - p * t;
+  if (p < cu) return `<span class="warn">Esse preço fica abaixo do custo de produção (${brl(cu)} cada).</span>`;
+  return l < 0 ? `<span class="warn">Paga os ingredientes, mas não cobre a parte das despesas do negócio (${brl(p * t)} em cada).</span>` : `Você ganha ${brl(l)} livre em cada, ${pct(l / p)} do preço${t ? `, depois de ${brl(cu)} de produção e ${brl(p * t)} de despesas` : ''}.`;
 }
 function rfItemCusto(it){ if (!it.insumoId) return ''; const c = custoItem({...it, qtd:num(it.qtd)}); return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
 function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))});
@@ -859,9 +1009,9 @@ function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({..
 const proxNumero = () => Object.values(S.orcamentos).reduce((m, o) => Math.max(m, num(o.numero)), 0) + 1;
 function novoOrcCliente(){
   const c = calcLinhas(ORC.linhas); if (!c.detalhes.length) return toast('Escolha uma receita e a quantidade');
-  const E = num(ORC.extras), m = margemOrc();
-  const itens = c.detalhes.map(d => { const share = c.custo ? d.custo / c.custo : 1 / c.detalhes.length; const preco = (d.custo + E * share) / (1 - m);
-    return {receitaId:d.id, nome:d.nome, qtd:inStr(d.qtd), unid:d.unid, preco:inStr(preco / d.qtd), custoUnit:d.custo / d.qtd}; });
+  const E = num(ORC.extras), P = precoOrc(), fator = P.direto ? P.preco / P.direto : 1;
+  const itens = c.detalhes.map(d => { const share = c.custo ? d.custo / c.custo : 1 / c.detalhes.length; const preco = (d.custo + E * share) * fator;
+    return {receitaId:d.id, nome:d.nome, qtd:inStr(d.qtd), unid:d.unid, preco:inStr(Math.ceil(preco / d.qtd * 100 - 1e-6) / 100), custoUnit:d.custo / d.qtd}; });
   const n = negocio();
   Q = {id:'', numero:proxNumero(), data:hoje(), cliente:'', telefone:'', dataEvento:'', validade:'7', obs:n.obsPadrao || '', itens, extras:E, status:'rascunho'};
   renderQ();
@@ -871,7 +1021,8 @@ function qCalc(){
   let total = 0, custo = num(Q.extras);
   Q.itens.forEach(i => { total += num(i.qtd) * num(i.preco); custo += num(i.qtd) * (i.custoUnit || 0); });
   const semCusto = Q.itens.some(i => i.receitaId && !i.custoUnit);
-  return {total: r2(total), custo, lucro: total - custo, mg: total ? (total - custo) / total : 0, semCusto};
+  const t = taxaDespesas().taxa, rateio = total * t, lucro = total - custo - rateio;
+  return {total: r2(total), custo, t, rateio, lucro, mg: total ? lucro / total : 0, semCusto};
 }
 function renderQ(){
   const c = qCalc();
@@ -907,7 +1058,7 @@ function renderQ(){
   </div></div>`, true);
 }
 function qPriv(c){
-  return `<p>${ic(I.lock)}Só você vê</p><p>Custo ${brl(c.custo)}. Com esses preços você ganha <b class="${c.lucro < 0 ? 'negt' : 'pos'}">${brl(c.lucro)}</b> (${pct(c.mg)} do total).</p>${c.semCusto ? '<p class="warn">Item avulso sem custo conhecido.</p>' : ''}`;
+  return `<p>${ic(I.lock)}Só você vê</p><p>Custo de produção ${brl(c.custo)}${c.t ? ` e despesas do negócio ${brl(c.rateio)} (${pct(c.t)})` : ''}. Com esses preços você ganha <b class="${c.lucro < 0 ? 'negt' : 'pos'}">${brl(c.lucro)}</b> livre (${pct(c.mg)} do total).</p>${c.semCusto ? '<p class="warn">Item avulso sem custo conhecido.</p>' : ''}`;
 }
 function qObj(status){
   const itens = Q.itens.filter(i => i.nome.trim() && num(i.qtd) > 0).map(i => ({receitaId:i.receitaId || '', nome:i.nome.trim(), qtd:num(i.qtd), unid:(i.unid || '').trim(), preco:r2(num(i.preco)), custoUnit:i.custoUnit || 0}));
@@ -1079,7 +1230,7 @@ function enviarTexto(){
 /* ============ Ajustes ============ */
 function openAjustes(){
   const d = dlg(); if (d.open && d.dataset.kind === 'ajustes' && d.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  NEG = NEG || negocio();
+  NEG = NEG || negocio(); MT = MT || {v:String(r2(metaLucro() * 100)).replace('.', ',')};
   const cfg = Cloud.cfg(); let nuvem;
   if (!cfg) nuvem = `<p class="hint">Com a nuvem ligada, os dados ficam na sua conta Google e voltam se trocar de celular. Crie um projeto grátis no Firebase (passo a passo no LEIA-ME) e cole a configuração aqui.</p>
     <label class="field" style="margin-top:8px"><span>Configuração do Firebase</span><textarea class="code" data-id="fbcfg" placeholder='{ apiKey: "...", authDomain: "...", projectId: "..." }'></textarea></label>
@@ -1098,6 +1249,9 @@ function openAjustes(){
       <label class="field"><span>Observação padrão dos orçamentos</span><textarea data-bind="neg.obsPadrao" placeholder="Entrega inclusa. 50% de sinal para confirmar a data.">${esc(NEG.obsPadrao)}</textarea></label>
       <button class="btn primary wide" data-act="salvarNeg">Salvar dados do negócio</button></section>
     <section><h3>Aparência</h3><div class="chips">${[['dark','Escuro'],['light','Claro'],['auto','Igual ao celular']].map(([v, l]) => `<button class="chip" data-act="tema" data-v="${v}" aria-pressed="${temaAtual() === v}">${l}</button>`).join('')}</div></section>
+    <section><h3>Meta de lucro livre</h3><p class="hint" style="margin-bottom:8px">O app avisa quando uma receita fica abaixo disso, por exemplo depois de uma alta de preço.</p>
+      <div class="row"><input inputmode="decimal" data-bind="mt.v" value="${esc(MT.v)}" aria-label="Meta de lucro livre em %"><button class="btn" style="flex:0 0 auto" data-act="salvarMeta">Salvar meta</button></div></section>
+    <section><h3>Despesas no preço</h3><p class="hint">${(() => { const tx = taxaDespesas(); return tx.modo === 'off' ? 'Desligado.' : `${pct(tx.taxa)} de cada venda, ${tx.modo === 'manual' ? 'definido por você' : 'calculado automaticamente'}.`; })()}</p><div class="btns"><button class="btn" data-act="rateio">Ajustar</button></div></section>
     <section><h3>Nuvem</h3>${nuvem}</section>
     <section><h3>Backup</h3><p class="hint">Último backup: ${u ? new Date(u).toLocaleDateString('pt-BR') : 'nunca'}. O arquivo pode ir para o Google Drive ou WhatsApp.</p>
       <div class="btns"><button class="btn primary" data-act="exportar">Salvar backup</button><label class="btn file-btn">Restaurar backup<input type="file" accept="application/json,.json" data-import></label></div></section>
@@ -1134,6 +1288,14 @@ function exemplo(){
     marg = In('Margarina', 9.9, 500, 'g'), ovos = In('Ovos', 22, 30, 'un'), rosca = In('Farinha de rosca', 6.5, 500, 'g'), alcatra = In('Alcatra', 44.9, 1, 'kg'),
     ling = In('Linguiça', 22.9, 1, 'kg'), carvao = In('Carvão', 19.9, 3, 'kg'), sal = In('Sal grosso', 3.5, 1, 'kg'), mand = In('Farinha de mandioca', 9, 1, 'kg'),
     arroz = In('Arroz', 27.9, 5, 'kg'), acucar = In('Açúcar', 4.79, 1, 'kg'), choc = In('Chocolate em pó', 8.9, 200, 'g');
+  const hist = (id, pares) => { const i = S.insumos[id], u = UNITS[i.unidade].m * num(i.qtd), f = UNITS[i.unidade].f === 'un' ? 1 : 1000;
+    const h = pares.map(([data, preco]) => ({data, preco, qtd:i.qtd, unidade:i.unidade, ref:r2(preco / u * f * 10000) / 10000}));
+    h.push({data:addDias(hoje(), -3), preco:i.preco, qtd:i.qtd, unidade:i.unidade, ref:r2(i.preco / u * f * 10000) / 10000});
+    save('insumos', {...i, historico:h, precoEm:addDias(hoje(), -3)}); };
+  hist(alcatra, [[addDias(hoje(), -75), 39.9], [addDias(hoje(), -40), 42.5]]);
+  hist(frango, [[addDias(hoje(), -50), 16.9]]);
+  hist(oleo, [[addDias(hoje(), -30), 8.99]]);
+  save('insumos', {...S.insumos[choc], precoEm:addDias(hoje(), -80)});
   const R = (nome, categoria, rendimento, rendUnid, itens, preco = 0) => { const o = {id:uid(), nome, categoria, rendimento, rendUnid, preco, itens:itens.map(([insumoId, qtd, unidade]) => ({insumoId, qtd, unidade}))}; save('receitas', o); return o; };
   const cx = R('Coxinha de frango', 'Salgados', 100, 'salgados', [[trigo,1,'kg'],[frango,1,'kg'],[leite,1,'L'],[marg,100,'g'],[oleo,900,'ml'],[rosca,500,'g'],[ovos,3,'un']], 0.9);
   const ch = R('Churrasco', 'Churrasco', 20, 'pessoas', [[alcatra,4,'kg'],[ling,2,'kg'],[carvao,6,'kg'],[sal,300,'g']], 18);
@@ -1161,6 +1323,7 @@ function exemplo(){
 const ACT = {
   tab: b => { TAB = b.dataset.id; window.scrollTo(0, 0); render(); },
   cad: b => { CAD = b.dataset.v; render(); },
+  irReceitas: () => { CAD = 'rec'; TAB = 'cad'; window.scrollTo(0, 0); render(); },
   irInsumos: () => { CAD = 'ins'; TAB = 'cad'; window.scrollTo(0, 0); render(); },
   ajustes: () => { NEG = null; openAjustes(); },
   tema: b => { aplicarTema(b.dataset.v); openAjustes(); },
@@ -1168,16 +1331,16 @@ const ACT = {
   addLinha: b => { FORMS[b.dataset.f]().linhas.push({receitaId:'', qtd:''}); render(); },
   rmLinha: b => { const f = FORMS[b.dataset.f](); f.linhas.splice(+b.dataset.i, 1); if (!f.linhas.length) f.linhas.push({receitaId:'', qtd:''}); if (b.dataset.f === 'lan') autoTotalLan(); render(); },
   margem: b => { ORC.margem = b.dataset.v; render(); },
-  orcModo: b => { const m = margemOrc(); ORC.modo = b.dataset.v;
-    if (ORC.modo === 'valor' && !num(ORC.lucroValor)){ const c = calcLinhas(ORC.linhas).custo + num(ORC.extras); if (c) ORC.lucroValor = moneyStr(r2(c / (1 - m) - c)); }
-    if (ORC.modo === 'pct') ORC.margem = String(Math.round(m * 10000) / 100).replace('.', ',');
+  orcModo: b => { const P = precoOrc(); if (ORC.modo === b.dataset.v) return; ORC.modo = b.dataset.v;
+    if (ORC.modo === 'valor' && P.direto) ORC.lucroValor = moneyStr(r2(Math.max(P.lucro, 0)));
+    if (ORC.modo === 'pct') ORC.margem = String(Math.round(Math.max(P.m, 0) * 10000) / 100).replace('.', ',');
     render(); },
-  orcTabela: () => { const c = calcLinhas(ORC.linhas), custo = c.custo + num(ORC.extras), tab = c.detalhes.reduce((a, d) => a + (d.venda || 0), 0);
-    ORC.modo = 'valor'; ORC.lucroValor = moneyStr(r2(Math.max(tab - custo, 0))); render(); toast('Lucro ajustado ao preço de tabela', 'ok'); },
+  orcTabela: () => { const P = precoOrc(), tab = P.c.detalhes.reduce((a, d) => a + (d.venda || 0), 0);
+    ORC.modo = 'valor'; ORC.lucroValor = moneyStr(r2(Math.max(tab - P.direto - tab * P.t, 0))); render(); toast('Preço ajustado ao preço de tabela', 'ok'); },
   lanAuto: () => { LAN.manual = false; autoTotalLan(); render(); },
   rfSug: b => { RF.preco = moneyStr(num(b.dataset.v)); renderRf(); },
   orcParaLan: () => { const c = calcLinhas(ORC.linhas), ex = num(ORC.extras);
-    LAN = {...novoLan(), linhas:clean(ORC.linhas.filter(l => l.receitaId)), extras:ORC.extras, recebido:moneyStr(r2((c.custo + ex) / (1 - margemOrc()))), manual:true};
+    LAN = {...novoLan(), linhas:clean(ORC.linhas.filter(l => l.receitaId)), extras:ORC.extras, recebido:moneyStr(r2(precoOrc().preco)), manual:true};
     TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
   orcCliente: () => novoOrcCliente(),
   abrirOrc: b => abrirOrc(b.dataset.id),
@@ -1231,7 +1394,20 @@ const ACT = {
   novoInsumo: () => openInsumo(''),
   editInsumo: b => openInsumo(b.dataset.id),
   salvarInsumo: () => { if (!INS.nome.trim()) return toast('Dê um nome ao insumo'); if (!num(INS.preco) || !num(INS.qtd)) return toast('Informe o preço e o tamanho da embalagem');
-    save('insumos', {id:INS.id || uid(), nome:INS.nome.trim(), preco:num(INS.preco), qtd:num(INS.qtd), unidade:INS.unidade}); closeDlg(); render(); toast('Insumo salvo'); },
+    const antigo = INS.id ? S.insumos[INS.id] : null, antes = fotoReceitas();
+    const o = registrarPreco(antigo, {id:INS.id || uid(), nome:INS.nome.trim(), preco:num(INS.preco), qtd:num(INS.qtd), unidade:INS.unidade});
+    save('insumos', o); closeDlg(); render();
+    if (antigo && (num(antigo.preco) !== o.preco || num(antigo.qtd) !== o.qtd || antigo.unidade !== o.unidade)){
+      const de = refPreco(antigo), para = refPreco(o); mostrarImpacto([{nome:o.nome, de, para, unid:refUnid(o), v:de ? para / de - 1 : 0}], antes);
+    } else toast('Insumo salvo'); },
+  precos: () => { if (!Object.keys(S.insumos).length) return toast('Não há insumos cadastrados ainda'); openPrecos(); },
+  prSalvar: () => { const alt = prAlterados(); if (!alt.length) return toast('Não há preço alterado para salvar');
+    const antes = fotoReceitas(), mud = [];
+    alt.forEach(i => { const o = registrarPreco(i, {preco:r2(num(PR.vals[i.id]))}); const de = refPreco(i), para = refPreco(o);
+      mud.push({nome:i.nome, de, para, unid:refUnid(i), v:de ? para / de - 1 : 0}); save('insumos', o); });
+    closeDlg(); render(); mostrarImpacto(mud.sort((a, b) => b.v - a.v), antes); },
+  salvarMeta: () => { const v = num(MT.v); if (v < 0 || v > 90) return toast('Informe uma meta entre 0 e 90%');
+    save('config', {id:'metas', lucroMin:r2(v)}); render(); toast('Meta de lucro salva'); },
   delInsumo: async () => { const id = INS.id; const usado = Object.values(S.receitas).filter(r => (r.itens || []).some(i => i.insumoId === id)).map(r => r.nome);
     if (await askConfirm(usado.length ? `Esse insumo está em: ${usado.join(', ')}. Excluir mesmo assim? Essas receitas vão ficar com ingrediente faltando.` : 'Excluir este insumo?', 'Excluir')){ remove('insumos', id); closeDlg(); render(); toast('Insumo excluído'); } },
   novaReceita: () => openReceita(''),
@@ -1245,6 +1421,10 @@ const ACT = {
     if (cat === '__nova'){ const nome = (RF.novaCat || '').trim(); if (!nome) return toast('Dê um nome à nova categoria');
       cat = acharCat(nome) || nome; if (!acharCat(nome)) salvarListaCat([...categorias(), nome]); }
     save('receitas', {id:RF.id || uid(), nome:RF.nome.trim(), categoria:cat, rendimento:num(RF.rendimento), rendUnid:RF.rendUnid.trim() || 'unidades', itens, preco:r2(num(RF.preco))}); closeDlg(); render(); toast('Receita salva'); },
+  rateio: () => openRateio(),
+  rtModo: b => { RT.modo = b.dataset.v; if (RT.modo === 'manual' && !RT.pct){ const t = baseRateio().taxa; if (t) RT.pct = String(Math.round(t * 1000) / 10).replace('.', ','); } renderRateio(); },
+  rtSalvar: () => { if (RT.modo === 'manual'){ const v = num(RT.pct); if (v < 0 || v > 60) return toast('Informe um percentual entre 0 e 60'); }
+    save('config', {id:'rateio', modo:RT.modo, pct:RT.modo === 'manual' ? r2(num(RT.pct)) : null}); closeDlg(); render(); toast('Percentual das despesas salvo'); },
   novaDesp: b => openDesp('', b.dataset.mes || REL),
   editDesp: b => openDesp(b.dataset.id, REL),
   despTipo: b => { DP.tipo = b.dataset.v; renderDesp(); },
@@ -1315,6 +1495,12 @@ function bind(t){
     const th = $('#lan-total-hint'); if (th) th.innerHTML = lanTotalHint();
     $('#lan-result').innerHTML = lanResult(); const ph = $('#lan-pag-hint'); if (ph) ph.innerHTML = pagHint(); }
   if (f === 'ins') $('#ins-prev').innerHTML = insPrev();
+  if (f === 'pr'){
+    if (parts[0] === 'busca'){ $('#pr-list').innerHTML = prLinhas(); normMoney($('#pr-list')); }
+    else { const i = S.insumos[parts[1]]; const el = $('#pr-v-' + parts[1]); if (i && el) el.innerHTML = prVar(i); }
+    const bt = $('#pr-btn'); if (bt) bt.textContent = prBtn();
+  }
+  if (f === 'rt'){ const e = $('#rt-ex'); if (e) e.textContent = brl(Math.min(num(RT.pct) / 100, .6) * 100); }
   if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); const ph = $('#rf-preco-hint'); if (ph) ph.innerHTML = rfPrecoHint(); }
   if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
 }

@@ -87,6 +87,28 @@ Se a conta de um mês vier diferente (a de luz, por exemplo), abra a despesa naq
 
 O relatório, a tela Início e o PDF mostram o **Sobrou no mês** = lucro das vendas − despesas do mês.
 
+## Despesas no preço (formação de preço)
+
+O preço sugerido segue o método usado por empresas, o **markup divisor**:
+
+**Preço = custo de produção ÷ (1 − % de despesas − % de lucro)**
+
+- **Custo de produção:** ingredientes da receita mais os custos só daquele pedido (entrega, ajudante).
+- **% de despesas:** a parte de cada venda que paga as contas do mês. No modo automático = despesas fixas por mês ÷ vendas médias por mês (últimos 3 meses fechados). Também pode ser definido à mão ou desligado, em **Ajustes → Despesas no preço** ou pelo link **Ajustar** no Orçar.
+- **% de lucro:** o que sobra livre, depois de pagar produção e despesas.
+
+Exemplo: custo de R$ 98,70, despesas de 5% e lucro de 20% → preço de R$ 131,75, dos quais R$ 6,70 pagam as despesas e R$ 26,35 são lucro livre.
+
+O percentual entra no preço sugerido do Orçar, na sugestão de preço das receitas, no quadro "Só você vê" do orçamento e no lucro livre mostrado ao lançar uma venda. No **relatório**, as despesas reais do mês são descontadas uma vez só, no "Sobrou no mês", para não contar em dobro. O relatório também compara o percentual usado nos preços com o peso real das despesas no mês e avisa se os preços não estão cobrindo as contas.
+
+## Preços dos insumos: atualização rápida, histórico e alertas
+
+- **Atualizar preços:** em **Cadastros → Insumos** (ou no atalho da tela Início), a tela **Atualizar preços** lista todos os insumos com o preço atual. Na volta do mercado, é só digitar o preço novo dos que mudaram. A tela mostra na hora se subiu ou caiu, e o botão diz quantos preços serão salvos.
+- **Histórico:** cada mudança de preço fica guardada com a data. Ao abrir um insumo, aparece a lista de preços anteriores, o preço por kg, litro ou unidade, e a variação de um para o outro.
+- **Impacto nas receitas:** depois de salvar, o app mostra o que mudou e como ficou o custo e o lucro livre de cada receita afetada. As que caíram abaixo da meta aparecem com o botão **Ajustar preço**.
+- **Meta de lucro livre:** definida em **Ajustes** (padrão de 20%). Receitas abaixo da meta ficam marcadas na lista e geram um aviso na tela Início.
+- **Preços parados:** insumos sem atualização há mais de 60 dias ficam marcados, e a tela Início lembra de atualizar.
+
 ## Como os dados são guardados
 
 - **No celular:** IndexedDB, com pedido de armazenamento persistente para o Android não apagar os dados.
