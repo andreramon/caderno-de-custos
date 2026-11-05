@@ -109,6 +109,24 @@ O percentual entra no preço sugerido do Orçar, na sugestão de preço das rece
 - **Meta de lucro livre:** definida em **Ajustes** (padrão de 20%). Receitas abaixo da meta ficam marcadas na lista e geram um aviso na tela Início.
 - **Preços parados:** insumos sem atualização há mais de 60 dias ficam marcados, e a tela Início lembra de atualizar.
 
+## Receitas dentro de receitas (preparos)
+
+No cadastro da receita, cada ingrediente pode ser um **insumo** ou **outra receita já cadastrada**. Exemplo: cadastre o **Vinagrete** uma vez (tomate, cebola, cheiro-verde, limão) e depois coloque-o dentro do **Churrasco completo**, junto com o churrasco, a farofa e o arroz.
+
+- A quantidade do preparo pode ser na unidade dele (20 porções de vinagrete) ou em **receita inteira**.
+- O custo é calculado com tudo o que está dentro. Se o tomate subir, o vinagrete e o churrasco completo são recalculados juntos, e o resumo de preços mostra o impacto nos dois.
+- A lista de compras do Orçar abre os preparos e soma os insumos de dentro deles.
+- O app não deixa uma receita entrar dentro dela mesma, direta ou indiretamente.
+
+## Taxas da maquininha
+
+Em **Ajustes → Taxas da maquininha**, informe o percentual de **débito**, **crédito à vista** e **crédito parcelado**, e escolha quem paga a taxa:
+
+- **O cliente:** o preço no cartão é calculado para você receber o mesmo valor do Pix depois do desconto da maquininha (preço no cartão = preço à vista ÷ (1 − taxa)).
+- **Eu:** o cliente paga o mesmo valor e a taxa sai do seu lucro.
+
+O **Orçar** mostra quanto fica em cada forma de pagamento. O **orçamento para o cliente** pode mostrar o valor à vista e os valores no cartão, no PDF e no texto do WhatsApp. Na **venda**, escolha o meio de pagamento: a taxa da maquininha é registrada como custo daquela venda e entra no relatório do mês.
+
 ## Como os dados são guardados
 
 - **No celular:** IndexedDB, com pedido de armazenamento persistente para o Android não apagar os dados.

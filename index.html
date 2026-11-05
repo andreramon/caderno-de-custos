@@ -299,6 +299,7 @@ function num(v){
 const r2 = n => Math.round(n * 100) / 100;
 const brl = n => (n || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const pct = n => ((n || 0) * 100).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%';
+const pct2 = n => ((n || 0) * 100).toLocaleString('pt-BR', {maximumFractionDigits:2}) + '%';
 const fq = n => (n || 0).toLocaleString('pt-BR', {maximumFractionDigits:2});
 const inStr = n => n === '' || n == null ? '' : String(r2(num(n))).replace('.', ',');
 const pad = n => String(n).padStart(2, '0');
@@ -435,16 +436,20 @@ const Cloud = {
 
 /* ============ Cálculos ============ */
 function custoBaseInsumo(i){ const u = UNITS[i.unidade]; const q = num(i.qtd) * (u ? u.m : 1); return q > 0 ? num(i.preco) / q : 0; }
-function custoItem(it){
+// Um item da receita pode ser um insumo ou outra receita (preparo), como um vinagrete dentro do churrasco.
+function custoItem(it, prof = 0){
+  if (it.receitaId){ const sub = S.receitas[it.receitaId]; if (!sub || prof > 6) return {custo:0, falta:true};
+    const c = custoReceita(sub, prof + 1), f = it.unidade === 'inteira' ? num(it.qtd) : num(it.qtd) / (num(sub.rendimento) || 1);
+    return {custo:c.total * f, falta:c.falta > 0, sub}; }
   const ins = S.insumos[it.insumoId]; if (!ins) return {custo:0, falta:true};
   const fi = UNITS[ins.unidade]?.f, u = UNITS[it.unidade] || UNITS[ins.unidade];
   if (!u || u.f !== fi || custoBaseInsumo(ins) === 0) return {custo:0, falta:true, ins};
   const base = num(it.qtd) * u.m;
   return {custo: base * custoBaseInsumo(ins), base, ins};
 }
-function custoReceita(r){
+function custoReceita(r, prof = 0){
   let total = 0, falta = 0;
-  (r.itens || []).forEach(it => { const c = custoItem(it); total += c.custo; if (c.falta) falta++; });
+  (r.itens || []).forEach(it => { const c = custoItem(it, prof); total += c.custo; if (c.falta) falta++; });
   return {total, unit: total / (num(r.rendimento) || 1), falta};
 }
 function calcLinhas(linhas){
@@ -453,11 +458,30 @@ function calcLinhas(linhas){
     const r = S.receitas[l.receitaId]; const q = num(l.qtd); if (!r || q <= 0) return;
     const f = q / (num(r.rendimento) || 1); const cr = custoReceita(r);
     custo += cr.total * f; detalhes.push({id:r.id, nome:r.nome, qtd:q, unid:r.rendUnid, custo:cr.total * f, falta:cr.falta, venda:num(r.preco) ? num(r.preco) * q : null});
-    (r.itens || []).forEach(it => { const c = custoItem(it); if (c.base) compras[it.insumoId] = (compras[it.insumoId] || 0) + c.base * f; });
+    addCompras(r, f, compras);
   });
   return {custo, detalhes, compras};
 }
-const custoTotal = l => num(l.custoItens) + num(l.extras);
+// Soma os insumos de uma receita, abrindo também as receitas que estão dentro dela.
+function addCompras(r, f, compras, prof = 0){
+  if (prof > 6) return;
+  (r.itens || []).forEach(it => {
+    if (it.receitaId){ const sub = S.receitas[it.receitaId]; if (!sub) return; const ff = it.unidade === 'inteira' ? num(it.qtd) : num(it.qtd) / (num(sub.rendimento) || 1); addCompras(sub, f * ff, compras, prof + 1); }
+    else { const c = custoItem(it); if (c.base) compras[it.insumoId] = (compras[it.insumoId] || 0) + c.base * f; }
+  });
+}
+function contemReceita(r, alvoId, prof = 0){
+  return prof < 7 && (r.itens || []).some(it => it.receitaId && (it.receitaId === alvoId || (S.receitas[it.receitaId] && contemReceita(S.receitas[it.receitaId], alvoId, prof + 1))));
+}
+const custoTotal = l => num(l.custoItens) + num(l.extras) + num(l.taxaCartao);
+/* Taxas da maquininha: o preço no cartão é calculado para você receber o mesmo valor do Pix depois do desconto da taxa. */
+const taxasCartao = () => { const c = (S.config && S.config.taxas) || {}; return {debito:num(c.debito) / 100, credito:num(c.credito) / 100, parcelado:num(c.parcelado) / 100, repassar:c.repassar !== false}; };
+const MEIOS = [['pix','Pix ou dinheiro'],['debito','Débito'],['credito','Crédito à vista'],['parcelado','Crédito parcelado']];
+const nomeMeio = m => (MEIOS.find(x => x[0] === m) || MEIOS[0])[1];
+const taxaMeio = m => m && m !== 'pix' ? (taxasCartao()[m] || 0) : 0;
+const comTaxa = (v, t) => t ? Math.ceil(v / (1 - t) * 100 - 1e-6) / 100 : v;
+const temTaxas = () => { const t = taxasCartao(); return !!(t.debito || t.credito || t.parcelado); };
+function valoresCartao(v){ const t = taxasCartao(); return MEIOS.slice(1).filter(([k]) => t[k]).map(([k, l]) => ({k, l, t:t[k], v:comTaxa(v, t[k])})); }
 function pagamentosDe(l){ return Array.isArray(l.pagamentos) && l.pagamentos.length ? l.pagamentos : [{id:'p0', tipo:'total', data:l.data, valor:num(l.faturamento), recebido:true}]; }
 const tipoPag = {total:'Pagamento', entrada:'Entrada', restante:'Restante'};
 // Cada valor conta no mês em que o dinheiro entrou; o custo acompanha na mesma proporção.
@@ -515,11 +539,11 @@ const margemOrc = () => precoOrc().m;
 /* ============ Estado dos formulários ============ */
 let TAB = 'ini', CAD = 'rec';
 let ORC = { linhas:[{receitaId:'', qtd:''}], extras:'', margem:'20', modo:'pct', lucroValor:'' };
-const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje() });
+const novoLan = () => ({ data:hoje(), descricao:'', linhas:[{receitaId:'', qtd:''}], extras:'', extrasDesc:'', recebido:'', orcId:'', pagamento:'pedido', dataPag:hoje(), entrada:'', dataEntrada:hoje(), meio:'pix', repassar:taxasCartao().repassar });
 let LAN = novoLan();
 let REL = hoje().slice(0, 7);
-let RF = null, INS = null, Q = null, NEG = null, CATS = null, DP = null, RT = null, PR = null, MT = null, BUSCA = '';
-const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS, dp:() => DP, rt:() => RT, pr:() => PR, mt:() => MT };
+let RF = null, INS = null, Q = null, NEG = null, CATS = null, DP = null, RT = null, PR = null, MT = null, TX = null, BUSCA = '';
+const FORMS = { orc:() => ORC, lan:() => LAN, rf:() => RF, ins:() => INS, q:() => Q, neg:() => NEG, cats:() => CATS, dp:() => DP, rt:() => RT, pr:() => PR, mt:() => MT, tx:() => TX };
 
 /* ============ Ícones ============ */
 const ic = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -669,8 +693,11 @@ const VIEWS = {
     <div class="panel">
       <div class="row"><label class="field"><span>Custos extras</span><div class="prefix"><input inputmode="decimal" data-bind="lan.extras" value="${esc(LAN.extras)}" placeholder="0,00"></div></label>
       <label class="field"><span>Quais</span><input data-bind="lan.extrasDesc" value="${esc(LAN.extrasDesc)}" placeholder="Gás, ajudante"></label></div>
-      <label class="field" style="margin-bottom:4px"><span>Valor total da venda</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
+      <label class="field" style="margin-bottom:4px"><span>Valor total da venda${LAN.meio !== 'pix' && taxaMeio(LAN.meio) && LAN.repassar ? ' (preço à vista, sem a taxa)' : ''}</span><div class="prefix"><input inputmode="decimal" data-bind="lan.recebido" value="${esc(LAN.recebido)}" placeholder="0,00"></div></label>
       <p class="hint" id="lan-total-hint" style="margin:0 0 12px">${lanTotalHint()}</p>
+      <div class="field"><span>Meio de pagamento</span><div class="chips">${MEIOS.map(([v, l]) => `<button class="chip" data-act="meio" data-v="${v}" aria-pressed="${LAN.meio === v}">${l}</button>`).join('')}</div></div>
+      ${LAN.meio !== 'pix' && taxaMeio(LAN.meio) ? `<div class="field"><span>Quem paga a taxa da maquininha?</span><div class="seg" role="group" aria-label="Quem paga a taxa" style="background:var(--bg);margin:2px 0 0"><button data-act="lanRep" data-v="1" aria-pressed="${LAN.repassar}">O cliente</button><button data-act="lanRep" data-v="0" aria-pressed="${!LAN.repassar}">Eu</button></div></div>` : ''}
+      <p class="hint" id="lan-cartao-hint" style="margin:0 0 12px">${cartaoHint()}</p>
       <div class="field"><span>Como vai ser pago</span><div class="chips">${[['pedido','No pedido'],['entrega','Na entrega'],['entrada','Entrada + restante na entrega']].map(([v, l]) => `<button class="chip" data-act="pagto" data-v="${v}" aria-pressed="${LAN.pagamento === v}">${l}</button>`).join('')}</div></div>
       ${LAN.pagamento === 'pedido' ? `<label class="field"><span>Data em que o dinheiro entrou</span><input type="date" data-bind="lan.dataPag" value="${esc(LAN.dataPag)}"></label>` : ''}
       ${LAN.pagamento === 'entrada' ? `<div class="row"><label class="field"><span>Valor da entrada</span><div class="prefix"><input inputmode="decimal" data-bind="lan.entrada" value="${esc(LAN.entrada)}" placeholder="0,00"></div></label>
@@ -726,7 +753,7 @@ function recView(){
   const grupos = {}; lista.forEach(r => (grupos[r.categoria || 'Outros'] ||= []).push(r));
   return `<div class="btns" style="margin-top:0"><button class="btn primary" style="flex:2" data-act="novaReceita">Nova receita</button><button class="btn" style="flex:1" data-act="categorias">Categorias</button></div>
   ${categorias().filter(c => grupos[c]).map(c => `<p class="group-title">${c}</p><div class="list">${grupos[c].map(r => { const cr = custoReceita(r);
-    return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
+    return `<button class="item" data-act="editReceita" data-id="${r.id}"><span><b>${esc(r.nome)}</b><small>Rende ${fq(num(r.rendimento))} ${esc(r.rendUnid)}</small>${(() => { const ss = (r.itens || []).filter(i => i.receitaId && S.receitas[i.receitaId]).map(i => S.receitas[i.receitaId].nome); return ss.length ? `<small>Inclui ${esc(ss.join(', '))}</small>` : ''; })()}${cr.falta ? '<span class="warn">Tem ingrediente sem preço</span>' : ''}</span>
     <span class="val">${num(r.preco) ? `${brl(num(r.preco))}<small>custa ${brl(cr.unit)}</small>${(() => { const pr = num(r.preco), l = (pr - cr.unit - pr * taxaDespesas().taxa) / pr; return `<small class="${l < metaLucro() ? 'negt' : 'pos'}">lucro livre ${pct(l)}</small>${l < metaLucro() ? '<span class="st alta">Abaixo da meta</span>' : ''}`; })()}` : `${brl(cr.unit)}<small>custo de cada</small><span class="st rascunho">Sem preço de venda</span>`}</span></button>`; }).join('')}</div>`).join('')}`;
 }
 function insView(){
@@ -836,6 +863,9 @@ function orcResult(){
   const lTab = tab - custo - tab * P.t;
   const tabHTML = temTab ? `<div class="panel" style="padding:14px 18px"><p><b>Pelo seu preço de tabela: ${brl(tab)}</b></p><p class="hint">Lucro livre de ${brl(lTab)} (${pct(tab ? lTab / tab : 0)} do valor). <button class="linkbtn" data-act="orcTabela">Usar este preço</button></p></div>` : '';
   return `<div class="ticket"><span class="ticket-label">Cobre</span><strong class="ticket-price">${brl(preco)}</strong><span class="ticket-sub">e você ganha ${brl(lucro)} livre, ${pct(m)} do valor</span></div>
+  ${(() => { const vc = valoresCartao(preco); if (!vc.length) return ''; const rep = taxasCartao().repassar;
+    return `<div class="panel" style="padding:14px 18px"><p><b>${rep ? 'Se pagar no cartão' : 'Se pagar no cartão, a maquininha desconta'}</b></p><dl class="resumo">${vc.map(x => `<div><dt>${x.l} (${pct2(x.t)})</dt><dd>${rep ? brl(x.v) : brl(preco * x.t)}</dd></div>`).join('')}</dl>
+    <p class="hint" style="margin-top:6px">${rep ? 'Com a taxa repassada ao cliente, você recebe os mesmos ' + brl(preco) + ' em qualquer forma de pagamento.' : 'A taxa sai do seu lucro. Para repassar ao cliente, mude em Ajustes.'}</p></div>`; })()}
   ${tabHTML}
   ${falta ? '<p class="warn" style="margin-bottom:10px">Alguma receita tem ingrediente sem preço, então o custo pode estar menor do que é.</p>' : ''}
   <div class="btns stack" style="margin:0 0 14px"><button class="btn primary wide" data-act="orcCliente">${ic(I.doc)}Fazer orçamento para o cliente</button>
@@ -851,18 +881,29 @@ function orcResult(){
   <details class="compras"><summary>Lista de compras</summary><ul>${compras}</ul></details></div>`;
 }
 function lanResult(){
-  const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras, fat = num(LAN.recebido);
+  const fat = lanValorFinal(), tc = fat * taxaMeio(LAN.meio);
+  const c = calcLinhas(LAN.linhas), extras = num(LAN.extras), custo = c.custo + extras + tc;
   if (!fat && !c.detalhes.length) return '';
   if (!fat) return `<div class="panel"><dl class="resumo"><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div>${extras ? `<div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>` : ''}<div class="total"><dt>Custo desta venda</dt><dd>${brl(custo)}</dd></div></dl><p class="hint" style="margin-top:8px">Informe o valor da venda para ver o seu lucro.</p></div>`;
   const t = taxaDespesas().taxa, rateio = fat * t, lucro = fat - custo, livre = lucro - rateio;
   return `<div class="lucro-box ${livre < 0 ? 'neg' : ''}"><span>${livre < 0 ? 'Prejuízo' : 'Seu lucro livre'}</span><strong>${brl(livre)}</strong><span>${pct(livre / fat)} do valor da venda${t ? ', já separando a parte das despesas' : ''}</span></div>
   <div class="panel"><dl class="resumo"><div><dt>Valor da venda</dt><dd>${brl(fat)}</dd></div><div><dt>Custo dos ingredientes</dt><dd>${brl(c.custo)}</dd></div><div><dt>Custos extras</dt><dd>${brl(extras)}</dd></div>
+  ${tc ? `<div><dt>Taxa da maquininha (${pct2(taxaMeio(LAN.meio))})</dt><dd>${brl(tc)}</dd></div>` : ''}
   <div class="total"><dt>Sobra depois da produção</dt><dd>${brl(lucro)}</dd></div>
   ${t ? `<div><dt>Parte das despesas do negócio (${pct(t)})</dt><dd>${brl(rateio)}</dd></div><div class="total"><dt>Lucro livre</dt><dd>${brl(livre)}</dd></div>` : ''}</dl>
   ${t ? '<p class="hint" style="margin-top:8px">No relatório, as despesas reais do mês são descontadas uma vez só, no "Sobrou no mês".</p>' : ''}</div>`;
 }
+function lanValorFinal(){ const t = taxaMeio(LAN.meio), v = num(LAN.recebido); return t && LAN.repassar ? comTaxa(v, t) : v; }
+function cartaoHint(){
+  if (LAN.meio === 'pix') return '';
+  const t = taxaMeio(LAN.meio); if (!t) return `<span class="warn">A taxa do ${nomeMeio(LAN.meio).toLowerCase()} não está cadastrada.</span> Cadastre em Ajustes, em Taxas da maquininha.`;
+  const v = num(LAN.recebido); if (!v) return `A maquininha cobra ${pct2(t)} no ${nomeMeio(LAN.meio).toLowerCase()}.`;
+  const fin = lanValorFinal(), tx = fin * t;
+  return LAN.repassar ? `O cliente paga <b>${brl(fin)}</b> no ${nomeMeio(LAN.meio).toLowerCase()}. A maquininha fica com ${brl(tx)} (${pct2(t)}) e você recebe ${brl(fin - tx)}.`
+    : `O cliente paga ${brl(fin)}. A maquininha desconta ${brl(tx)} (${pct2(t)}), que sai do seu lucro, e você recebe ${brl(fin - tx)}.`;
+}
 function pagHint(){
-  const h = hoje(), tot = num(LAN.recebido), mes = d => mesNome((d || h).slice(0, 7)).split(' ')[0].toLowerCase();
+  const h = hoje(), tot = lanValorFinal(), mes = d => mesNome((d || h).slice(0, 7)).split(' ')[0].toLowerCase();
   const resto = (v, d) => d > h ? `${brl(v)} fica em "A receber" até você tocar em Recebi (previsto para ${dataBR(d)}).` : `${brl(v)} conta como recebido em ${dataBR(d)}, porque o evento já foi.`;
   if (LAN.pagamento === 'entrega') return tot ? 'Na entrega: ' + resto(tot, LAN.data) : 'O valor entra no relatório quando você receber.';
   if (LAN.pagamento === 'entrada'){ const e = num(LAN.entrada);
@@ -876,7 +917,7 @@ function pagHint(){
 /* ============ Diálogos ============ */
 const dlg = () => $('#dlg');
 function openDlg(kind, html, full = false){ const d = dlg(); d.dataset.kind = kind; d.className = full ? 'full' : ''; d.innerHTML = html; normMoney(d); if (!d.open) d.showModal(); }
-function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = DP = RT = PR = MT = null; }
+function closeDlg(){ const d = dlg(); if (d.open) d.close(); d.dataset.kind = ''; RF = INS = Q = NEG = CATS = DP = RT = PR = MT = TX = null; }
 dlg().addEventListener('close', () => { dlg().dataset.kind = ''; });
 function askConfirm(msg, ok = 'Confirmar'){
   return new Promise(res => { const c = $('#cfm');
@@ -908,12 +949,14 @@ function insPrev(){ const u = UNITS[INS.unidade]; const cb = custoBaseInsumo(INS
   return u.f === 'g' ? `Sai ${brl(cb * 1000)} o quilo, ou ${brl(cb * 100)} a cada 100 g.` : u.f === 'ml' ? `Sai ${brl(cb * 1000)} o litro, ou ${brl(cb * 100)} a cada 100 ml.` : `Sai ${brl(cb)} cada unidade.`; }
 
 function openReceita(id){
-  RF = id ? clean(S.receitas[id]) : {id:'', nome:'', categoria:'Salgados', rendimento:'', rendUnid:'unidades', itens:[{insumoId:'', qtd:'', unidade:'g'}]};
-  RF.rendimento = inStr(RF.rendimento); RF.preco = num(RF.preco) ? moneyStr(num(RF.preco)) : ''; RF.itens.forEach(it => it.qtd = inStr(it.qtd));
+  RF = id ? clean(S.receitas[id]) : {id:'', nome:'', categoria:'Salgados', rendimento:'', rendUnid:'unidades', itens:[{ref:'', insumoId:'', qtd:'', unidade:'g'}]};
+  RF.rendimento = inStr(RF.rendimento); RF.preco = num(RF.preco) ? moneyStr(num(RF.preco)) : '';
+  RF.itens.forEach(it => { it.qtd = inStr(it.qtd); it.ref = it.receitaId ? 'r:' + it.receitaId : (it.insumoId || ''); });
   renderRf();
 }
 function renderRf(){
   const ins = Object.values(S.insumos).sort((a,b) => a.nome.localeCompare(b.nome));
+  const subs = Object.values(S.receitas).filter(x => x.id !== RF.id && !(RF.id && contemReceita(x, RF.id))).sort((a,b) => a.nome.localeCompare(b.nome));
   openDlg('rf', `<div class="dlg">${dlgHead(RF.id ? 'Editar receita' : 'Nova receita')}
   <div class="dlg-body">
     <label class="field"><span>Nome</span><input data-bind="rf.nome" value="${esc(RF.nome)}" placeholder="Coxinha de frango"></label>
@@ -921,11 +964,15 @@ function renderRf(){
     ${RF.categoria === '__nova' ? `<label class="field"><span>Nome da nova categoria</span><input data-bind="rf.novaCat" value="${esc(RF.novaCat || '')}" placeholder="Doces finos, Tortas, Kits festa…"></label>` : ''}
     <div class="row"><label class="field"><span>Rende</span><input inputmode="decimal" data-bind="rf.rendimento" value="${esc(RF.rendimento)}" placeholder="100"></label>
     <label class="field"><span>Em</span><input data-bind="rf.rendUnid" value="${esc(RF.rendUnid)}" placeholder="salgados, pessoas"></label></div>
-    <div class="field" style="margin-bottom:8px"><span>Ingredientes desta receita</span></div>
-    ${!ins.length ? '<p class="warn">Cadastre os insumos antes de montar a receita.</p>' : `<div class="linhas">${RF.itens.map((it, i) => { const sel = S.insumos[it.insumoId]; const fam = sel ? UNITS[sel.unidade].f : 'g';
-      return `<div class="linha"><select data-bind="rf.itens.${i}.insumoId" data-rerender="rf" aria-label="Insumo"><option value="">Escolha o insumo</option>${ins.map(x => `<option value="${x.id}" ${x.id === it.insumoId ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select>
+    <div class="field" style="margin-bottom:4px"><span>Ingredientes desta receita</span></div>
+    <p class="hint" style="margin-bottom:10px">Pode ser um insumo ou uma receita já cadastrada, como um vinagrete ou uma farofa. Assim você não precisa cadastrar tudo de novo.</p>
+    ${!ins.length && !subs.length ? '<p class="warn">Cadastre os insumos antes de montar a receita.</p>' : `<div class="linhas">${RF.itens.map((it, i) => { const sel = S.insumos[it.insumoId], sub = it.receitaId ? S.receitas[it.receitaId] : null; const fam = sel ? UNITS[sel.unidade].f : 'g';
+      const unOpts = sub ? [['por', sub.rendUnid || 'porções'], ['inteira', 'receita inteira']] : FAM_UNITS[fam].map(u => [u, u]);
+      return `<div class="linha"><select data-bind="rf.itens.${i}.ref" data-rerender="rf" aria-label="Insumo ou receita"><option value="">Escolha o insumo ou a receita</option>
+        <optgroup label="Insumos">${ins.map(x => `<option value="${x.id}" ${!it.receitaId && x.id === it.insumoId ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</optgroup>
+        ${subs.length ? `<optgroup label="Receitas e preparos">${subs.map(x => `<option value="r:${x.id}" ${it.receitaId === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</optgroup>` : ''}</select>
       <div class="row"><input inputmode="decimal" data-bind="rf.itens.${i}.qtd" value="${esc(it.qtd)}" placeholder="Quantidade" aria-label="Quantidade">
-      <select data-bind="rf.itens.${i}.unidade" data-rerender="rf" aria-label="Unidade">${FAM_UNITS[fam].map(u => `<option value="${u}" ${it.unidade === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>
+      <select data-bind="rf.itens.${i}.unidade" data-rerender="rf" aria-label="Unidade">${unOpts.map(([v, l]) => `<option value="${v}" ${it.unidade === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
       <button class="icon-btn" data-act="rmItem" data-i="${i}" aria-label="Remover ingrediente">${ic(I.x)}</button>
       <p class="linha-custo" id="rf-c-${i}">${rfItemCusto(it)}</p></div>`; }).join('')}</div>
     <button class="btn ghost wide" data-act="addItem">Adicionar ingrediente</button>`}
@@ -1001,7 +1048,9 @@ function rfPrecoHint(){
   if (p < cu) return `<span class="warn">Esse preço fica abaixo do custo de produção (${brl(cu)} cada).</span>`;
   return l < 0 ? `<span class="warn">Paga os ingredientes, mas não cobre a parte das despesas do negócio (${brl(p * t)} em cada).</span>` : `Você ganha ${brl(l)} livre em cada, ${pct(l / p)} do preço${t ? `, depois de ${brl(cu)} de produção e ${brl(p * t)} de despesas` : ''}.`;
 }
-function rfItemCusto(it){ if (!it.insumoId) return ''; const c = custoItem({...it, qtd:num(it.qtd)}); return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
+function rfItemCusto(it){ if (!it.insumoId && !it.receitaId) return ''; const c = custoItem({...it, qtd:num(it.qtd)});
+  if (it.receitaId){ const sub = S.receitas[it.receitaId]; return (c.falta ? '<span class="warn">Esse preparo tem ingrediente sem preço.</span> ' : '') + `${brl(c.custo)}, com tudo o que vai ${sub ? 'no ' + esc(sub.nome).toLowerCase() : 'no preparo'}`; }
+  return c.falta ? '<span class="warn">Insumo sem preço</span>' : brl(c.custo); }
 function rfTotal(){ const cr = custoReceita({...RF, itens:RF.itens.map(i => ({...i, qtd:num(i.qtd)}))});
   return `<div class="total"><dt>Custo da receita</dt><dd>${brl(cr.total)}</dd></div><div><dt>Custo de cada um (${esc(RF.rendUnid || 'unidades')})</dt><dd>${num(RF.rendimento) ? brl(cr.unit) : 'informe o rendimento'}</dd></div>`; }
 
@@ -1013,7 +1062,7 @@ function novoOrcCliente(){
   const itens = c.detalhes.map(d => { const share = c.custo ? d.custo / c.custo : 1 / c.detalhes.length; const preco = (d.custo + E * share) * fator;
     return {receitaId:d.id, nome:d.nome, qtd:inStr(d.qtd), unid:d.unid, preco:inStr(Math.ceil(preco / d.qtd * 100 - 1e-6) / 100), custoUnit:d.custo / d.qtd}; });
   const n = negocio();
-  Q = {id:'', numero:proxNumero(), data:hoje(), cliente:'', telefone:'', dataEvento:'', validade:'7', obs:n.obsPadrao || '', itens, extras:E, status:'rascunho'};
+  Q = {cartao:temTaxas() && taxasCartao().repassar, id:'', numero:proxNumero(), data:hoje(), cliente:'', telefone:'', dataEvento:'', validade:'7', obs:n.obsPadrao || '', itens, extras:E, status:'rascunho'};
   renderQ();
 }
 function abrirOrc(id){ const o = clean(S.orcamentos[id]); o.itens.forEach(i => { i.qtd = inStr(i.qtd); i.preco = inStr(i.preco); }); o.validade = String(o.validade ?? 7); Q = o; renderQ(); }
@@ -1045,6 +1094,9 @@ function renderQ(){
     </div>`).join('')}
     <div class="btns" style="margin:0 0 14px"><button class="btn ghost" style="flex:1" data-act="qAdd">Adicionar item avulso</button><button class="btn" style="flex:1" data-act="qArred">Arredondar preços</button></div>
     <div class="qtotal"><span>Total para o cliente</span><strong id="q-tot">${brl(c.total)}</strong></div>
+    ${temTaxas() ? `<div class="panel" style="background:var(--bg);padding:14px 16px"><div class="field" style="margin-bottom:8px"><span>Mostrar ao cliente o valor no cartão?</span>
+      <div class="seg" role="group" aria-label="Mostrar valor no cartão" style="background:var(--card);margin:2px 0 0"><button data-act="qCartao" data-v="1" aria-pressed="${!!Q.cartao}">Sim</button><button data-act="qCartao" data-v="0" aria-pressed="${!Q.cartao}">Não</button></div></div>
+      <dl class="resumo" id="q-cartao">${qCartaoHTML(c.total)}</dl></div>` : ''}
     <div class="privado" id="q-priv">${qPriv(c)}</div>
     <div class="row"><label class="field"><span>Validade</span><select data-bind="q.validade">${['3','7','15','30'].map(v => `<option value="${v}" ${Q.validade === v ? 'selected' : ''}>${v} dias</option>`).join('')}</select></label>
     <label class="field"><span>Emitido em</span><input type="date" data-bind="q.data" value="${esc(Q.data)}"></label></div>
@@ -1057,6 +1109,8 @@ function renderQ(){
     <button class="btn" data-act="qSalvar">Salvar</button>
   </div></div>`, true);
 }
+function qCartaoHTML(total){ if (!Q.cartao) return '<p class="hint">O orçamento vai mostrar só o valor à vista.</p>';
+  return `<div><dt>À vista (Pix ou dinheiro)</dt><dd>${brl(total)}</dd></div>` + valoresCartao(total).map(x => `<div><dt>${x.l}</dt><dd>${brl(x.v)}</dd></div>`).join(''); }
 function qPriv(c){
   return `<p>${ic(I.lock)}Só você vê</p><p>Custo de produção ${brl(c.custo)}${c.t ? ` e despesas do negócio ${brl(c.rateio)} (${pct(c.t)})` : ''}. Com esses preços você ganha <b class="${c.lucro < 0 ? 'negt' : 'pos'}">${brl(c.lucro)}</b> livre (${pct(c.mg)} do total).</p>${c.semCusto ? '<p class="warn">Item avulso sem custo conhecido.</p>' : ''}`;
 }
@@ -1064,7 +1118,7 @@ function qObj(status){
   const itens = Q.itens.filter(i => i.nome.trim() && num(i.qtd) > 0).map(i => ({receitaId:i.receitaId || '', nome:i.nome.trim(), qtd:num(i.qtd), unid:(i.unid || '').trim(), preco:r2(num(i.preco)), custoUnit:i.custoUnit || 0}));
   const total = r2(itens.reduce((a, i) => a + i.qtd * i.preco, 0));
   const custo = r2(itens.reduce((a, i) => a + i.qtd * i.custoUnit, 0) + num(Q.extras));
-  const o = {id:Q.id || uid(), numero:Q.numero, data:Q.data || hoje(), cliente:Q.cliente.trim(), telefone:fmtTel(Q.telefone), dataEvento:Q.dataEvento || '', validade:num(Q.validade) || 7, obs:Q.obs.trim(), itens, extras:num(Q.extras), total, custo, status};
+  const o = {cartao:!!Q.cartao, id:Q.id || uid(), numero:Q.numero, data:Q.data || hoje(), cliente:Q.cliente.trim(), telefone:fmtTel(Q.telefone), dataEvento:Q.dataEvento || '', validade:num(Q.validade) || 7, obs:Q.obs.trim(), itens, extras:num(Q.extras), total, custo, status};
   return o;
 }
 function qSalvar(status){
@@ -1076,7 +1130,7 @@ function textoOrc(o){
   const n = negocio();
   return [`*Orçamento Nº ${o.numero}${n.nome ? ' - ' + n.nome : ''}*`, o.cliente ? `Para: ${o.cliente}` : '', o.dataEvento ? `Evento: ${dataBR(o.dataEvento)}` : '', '',
     ...o.itens.map(i => `• ${fq(i.qtd)}${i.unid ? ' ' + i.unid : ''} ${i.nome}: ${brl(i.qtd * i.preco)}`), '',
-    `*Total: ${brl(o.total)}*`, `Válido até ${dataBR(addDias(o.data, o.validade))}`, o.obs ? '\n' + o.obs : '', n.pix ? `\nPix: ${n.pix}` : ''].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').replace(/\u00a0/g, ' ');
+    `*Total: ${brl(o.total)}*` + (o.cartao && valoresCartao(o.total).length ? ' à vista (Pix ou dinheiro)\nNo cartão: ' + valoresCartao(o.total).map(x => `${x.l} ${brl(x.v)}`).join(', ') : ''), `Válido até ${dataBR(addDias(o.data, o.validade))}`, o.obs ? '\n' + o.obs : '', n.pix ? `\nPix: ${n.pix}` : ''].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').replace(/\u00a0/g, ' ');
 }
 function waLink(tel, txt){
   let d = String(tel || '').replace(/\D/g, '');
@@ -1126,7 +1180,12 @@ async function gerarPDF(o){
   if (y > 245){ doc.addPage(); y = 24; }
   y += 2; doc.setFillColor(...MANGA); doc.roundedRect(W - M - 86, y, 86, 20, 3, 3, 'F');
   doc.setTextColor(59,37,0); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('TOTAL', W - M - 80, y + 12);
-  doc.setFontSize(17); doc.text(t(brl(o.total)), W - M - 6, y + 13, {align:'right'}); y += 32;
+  doc.setFontSize(17); doc.text(t(brl(o.total)), W - M - 6, y + 13, {align:'right'}); y += 26;
+  const vc = o.cartao ? valoresCartao(o.total) : [];
+  if (vc.length){ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...CINZA);
+    doc.text(t('Total à vista, no Pix ou dinheiro. No cartão:'), W - M, y, {align:'right'}); y += 5.5;
+    doc.setTextColor(...TINTA); doc.setFontSize(10); vc.forEach(x => { doc.text(t(`${x.l}: ${brl(x.v)}`), W - M, y, {align:'right'}); y += 5.2; }); y += 2; }
+  y += 6;
   const bloco = (titulo, texto) => { const ls = doc.splitTextToSize(t(texto), W - 2 * M); if (y + ls.length * 5 + 8 > 280){ doc.addPage(); y = 24; }
     doc.setTextColor(...CINZA); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(titulo, M, y); y += 5.5;
     doc.setTextColor(...TINTA); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.text(ls, M, y); y += ls.length * 5 + 6; };
@@ -1230,6 +1289,7 @@ function enviarTexto(){
 /* ============ Ajustes ============ */
 function openAjustes(){
   const d = dlg(); if (d.open && d.dataset.kind === 'ajustes' && d.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (!TX){ const c = (S.config && S.config.taxas) || {}; const f = v => v ? String(v).replace('.', ',') : ''; TX = {debito:f(c.debito), credito:f(c.credito), parcelado:f(c.parcelado), repassar:c.repassar !== false}; }
   NEG = NEG || negocio(); MT = MT || {v:String(r2(metaLucro() * 100)).replace('.', ',')};
   const cfg = Cloud.cfg(); let nuvem;
   if (!cfg) nuvem = `<p class="hint">Com a nuvem ligada, os dados ficam na sua conta Google e voltam se trocar de celular. Crie um projeto grátis no Firebase (passo a passo no LEIA-ME) e cole a configuração aqui.</p>
@@ -1249,6 +1309,13 @@ function openAjustes(){
       <label class="field"><span>Observação padrão dos orçamentos</span><textarea data-bind="neg.obsPadrao" placeholder="Entrega inclusa. 50% de sinal para confirmar a data.">${esc(NEG.obsPadrao)}</textarea></label>
       <button class="btn primary wide" data-act="salvarNeg">Salvar dados do negócio</button></section>
     <section><h3>Aparência</h3><div class="chips">${[['dark','Escuro'],['light','Claro'],['auto','Igual ao celular']].map(([v, l]) => `<button class="chip" data-act="tema" data-v="${v}" aria-pressed="${temaAtual() === v}">${l}</button>`).join('')}</div></section>
+    <section><h3>Taxas da maquininha</h3><p class="hint" style="margin-bottom:8px">O percentual que a maquininha desconta em cada forma de pagamento. Deixe em branco o que você não usa.</p>
+      <div class="row"><label class="field"><span>Débito (%)</span><input inputmode="decimal" data-bind="tx.debito" value="${esc(TX.debito)}" placeholder="Ex.: 1,99"></label>
+      <label class="field"><span>Crédito à vista (%)</span><input inputmode="decimal" data-bind="tx.credito" value="${esc(TX.credito)}" placeholder="Ex.: 4,98"></label></div>
+      <label class="field"><span>Crédito parcelado (%)</span><input inputmode="decimal" data-bind="tx.parcelado" value="${esc(TX.parcelado)}" placeholder="Ex.: 8,90"></label>
+      <div class="field"><span>Quem paga a taxa?</span><div class="seg" role="group" aria-label="Quem paga a taxa" style="background:var(--bg);margin:2px 0 0"><button data-act="txRep" data-v="1" aria-pressed="${TX.repassar}">O cliente</button><button data-act="txRep" data-v="0" aria-pressed="${!TX.repassar}">Eu</button></div></div>
+      <p class="hint" style="margin-bottom:8px">${TX.repassar ? 'O cliente paga um pouco mais no cartão, e você recebe o mesmo valor do Pix.' : 'O cliente paga o mesmo valor, e a taxa sai do seu lucro.'}</p>
+      <button class="btn primary wide" data-act="salvarTaxas">Salvar taxas</button></section>
     <section><h3>Meta de lucro livre</h3><p class="hint" style="margin-bottom:8px">O app avisa quando uma receita fica abaixo disso, por exemplo depois de uma alta de preço.</p>
       <div class="row"><input inputmode="decimal" data-bind="mt.v" value="${esc(MT.v)}" aria-label="Meta de lucro livre em %"><button class="btn" style="flex:0 0 auto" data-act="salvarMeta">Salvar meta</button></div></section>
     <section><h3>Despesas no preço</h3><p class="hint">${(() => { const tx = taxaDespesas(); return tx.modo === 'off' ? 'Desligado.' : `${pct(tx.taxa)} de cada venda, ${tx.modo === 'manual' ? 'definido por você' : 'calculado automaticamente'}.`; })()}</p><div class="btns"><button class="btn" data-act="rateio">Ajustar</button></div></section>
@@ -1308,6 +1375,12 @@ function exemplo(){
     const itens = [[ch, p], [fa, p], [ar, p]].map(([r, q]) => ({receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:q, unidade:r.rendUnid, custo:r2(custoReceita(r).total * q / r.rendimento)}));
     save('lancamentos', {id:uid(), data:ymd(dt), descricao:'Churrasco de sexta (exemplo)', itens, extras:ex, extrasDesc:'Gás e ajudante', custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:rec});
   });
+  const tom = In('Tomate', 8.99, 1, 'kg'), ceb = In('Cebola', 6.49, 1, 'kg'), chv = In('Cheiro-verde (maço)', 3, 1, 'un'), lim = In('Limão', 6, 10, 'un');
+  const vi = R('Vinagrete', 'Acompanhamentos', 20, 'porções', [[tom,1,'kg'],[ceb,500,'g'],[chv,1,'un'],[lim,3,'un']], 2);
+  const cc = {id:uid(), nome:'Churrasco completo', categoria:'Churrasco', rendimento:20, rendUnid:'pessoas', preco:28,
+    itens:[{receitaId:ch.id, qtd:20, unidade:'por'}, {receitaId:fa.id, qtd:20, unidade:'por'}, {receitaId:vi.id, qtd:20, unidade:'por'}, {receitaId:ar.id, qtd:20, unidade:'por'}]};
+  save('receitas', cc);
+  if (!S.config.taxas) save('config', {id:'taxas', debito:1.99, credito:4.98, parcelado:8.9, repassar:true});
   const evt = addDias(hoje(), 7);
   const itA = [[cx, 300], [bo, 32]].map(([r, q]) => ({receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:q, unidade:r.rendUnid, custo:r2(custoReceita(r).total * q / r.rendimento)}));
   save('lancamentos', {id:uid(), data:evt, descricao:'Aniversário da Ana (exemplo)', itens:itA, extras:30, extrasDesc:'Entrega', custoItens:r2(itA.reduce((a, i) => a + i.custo, 0)), faturamento:600, pagamento:'entrada',
@@ -1344,6 +1417,7 @@ const ACT = {
     TAB = 'lan'; window.scrollTo(0, 0); render(); toast('Confira o valor que entrou e salve'); },
   orcCliente: () => novoOrcCliente(),
   abrirOrc: b => abrirOrc(b.dataset.id),
+  qCartao: b => { Q.cartao = b.dataset.v === '1'; renderQ(); },
   qAdd: () => { Q.itens.push({receitaId:'', nome:'', qtd:'1', unid:'', preco:'', custoUnit:0}); renderQ(); setTimeout(() => { const els = dlg().querySelectorAll('.qitem .nome'); els[els.length - 1]?.focus(); }, 50); },
   qRm: b => { Q.itens.splice(+b.dataset.i, 1); renderQ(); },
   qArred: () => { Q.itens.forEach(i => i.preco = inStr(roundNice(num(i.preco)))); renderQ(); toast('Preços arredondados para cima'); },
@@ -1359,17 +1433,20 @@ const ACT = {
     const itens = LAN.linhas.filter(l => S.receitas[l.receitaId] && num(l.qtd) > 0).map(l => { const r = S.receitas[l.receitaId];
       return {receitaId:r.id, nome:r.nome, categoria:r.categoria, qtd:num(l.qtd), unidade:r.rendUnid, custo:r2(custoReceita(r).total * num(l.qtd) / (num(r.rendimento) || 1))}; });
     if (!LAN.data) return toast('Informe a data do evento');
-    const tot = r2(num(LAN.recebido)); if (!tot) return toast('Informe o valor total da venda');
+    const tot = r2(lanValorFinal()); if (!tot) return toast('Informe o valor total da venda');
+    const taxaC = r2(tot * taxaMeio(LAN.meio));
     const h = hoje(); let pags;
     if (LAN.pagamento === 'entrada'){ const e = r2(num(LAN.entrada)); if (!e || e >= tot) return toast('Informe uma entrada menor que o valor total');
       pags = [{id:uid(), tipo:'entrada', data:LAN.dataEntrada || h, valor:e, recebido:true}, {id:uid(), tipo:'restante', data:LAN.data, valor:r2(tot - e), recebido:LAN.data <= h}];
     } else if (LAN.pagamento === 'entrega') pags = [{id:uid(), tipo:'total', data:LAN.data, valor:tot, recebido:LAN.data <= h}];
     else pags = [{id:uid(), tipo:'total', data:LAN.dataPag || h, valor:tot, recebido:true}];
-    save('lancamentos', {id:uid(), data:LAN.data, descricao:LAN.descricao.trim() || (itens[0] ? itens[0].nome : 'Venda'), itens, extras:num(LAN.extras), extrasDesc:LAN.extrasDesc.trim(), custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:tot, pagamento:LAN.pagamento, pagamentos:pags, orcId:LAN.orcId || ''});
+    save('lancamentos', {id:uid(), data:LAN.data, descricao:LAN.descricao.trim() || (itens[0] ? itens[0].nome : 'Venda'), itens, extras:num(LAN.extras), extrasDesc:LAN.extrasDesc.trim(), custoItens:r2(itens.reduce((a, i) => a + i.custo, 0)), faturamento:tot, pagamento:LAN.pagamento, pagamentos:pags, orcId:LAN.orcId || '', meio:LAN.meio, taxaCartao:taxaC, taxaRepassada:!!(taxaC && LAN.repassar)});
     const falta = pags.filter(p => !p.recebido).reduce((a, p) => a + p.valor, 0);
     LAN = novoLan(); render(); toast(falta ? `Venda salva. ${brl(falta)} ficou em A receber` : 'Venda salva', 'ok');
   },
   pagto: b => { LAN.pagamento = b.dataset.v; render(); },
+  meio: b => { LAN.meio = b.dataset.v; render(); },
+  lanRep: b => { LAN.repassar = b.dataset.v === '1'; render(); },
   receber: b => { const l = clean(S.lancamentos[b.dataset.l]); const p = (l.pagamentos || []).find(x => x.id === b.dataset.p); if (!p) return;
     p.previsto = p.previsto || p.data; p.data = hoje(); p.recebido = true; save('lancamentos', l);
     toast(`Recebimento de ${brl(num(p.valor))} registrado hoje`, 'ok');
@@ -1385,7 +1462,7 @@ const ACT = {
     <h3 style="margin:16px 0 8px">Custos</h3>
     <dl class="resumo">${(l.itens || []).map(i => `<div><dt>${esc(i.nome)}, ${fq(i.qtd)} ${esc(i.unidade)}</dt><dd>${brl(i.custo)}</dd></div>`).join('')}
     ${num(l.extras) ? `<div><dt>Extras${l.extrasDesc ? ' (' + esc(l.extrasDesc) + ')' : ''}</dt><dd>${brl(num(l.extras))}</dd></div>` : ''}
-    <div class="total"><dt>Custo total</dt><dd>${brl(c)}</dd></div><div><dt>Valor da venda</dt><dd>${brl(f)}</dd></div></dl>
+    <div class="total"><dt>Custo total</dt><dd>${brl(c)}</dd></div>${num(l.taxaCartao) ? `<div><dt>Taxa da maquininha (${esc(nomeMeio(l.meio).toLowerCase())})</dt><dd>${brl(num(l.taxaCartao))}</dd></div>` : ''}<div><dt>Valor da venda${l.meio && l.meio !== 'pix' ? ' no ' + esc(nomeMeio(l.meio).toLowerCase()) : ''}</dt><dd>${brl(f)}</dd></div></dl>
     <p class="hint" style="margin-top:10px">Os custos são os do dia do lançamento.</p></div>
     <div class="dlg-foot"><button class="btn danger" data-act="delLan" data-id="${l.id}">Excluir venda</button></div></div>`); },
   delLan: async b => { if (await askConfirm('Excluir este lançamento?', 'Excluir')){ remove('lancamentos', b.dataset.id); closeDlg(); render(); toast('Lançamento excluído'); } },
@@ -1406,17 +1483,21 @@ const ACT = {
     alt.forEach(i => { const o = registrarPreco(i, {preco:r2(num(PR.vals[i.id]))}); const de = refPreco(i), para = refPreco(o);
       mud.push({nome:i.nome, de, para, unid:refUnid(i), v:de ? para / de - 1 : 0}); save('insumos', o); });
     closeDlg(); render(); mostrarImpacto(mud.sort((a, b) => b.v - a.v), antes); },
+  txRep: b => { TX.repassar = b.dataset.v === '1'; openAjustes(); },
+  salvarTaxas: () => { const v = k => r2(num(TX[k])); if (['debito','credito','parcelado'].some(k => v(k) < 0 || v(k) > 30)) return toast('Informe taxas entre 0 e 30%');
+    save('config', {id:'taxas', debito:v('debito'), credito:v('credito'), parcelado:v('parcelado'), repassar:TX.repassar}); LAN.repassar = TX.repassar; render(); toast('Taxas salvas'); },
   salvarMeta: () => { const v = num(MT.v); if (v < 0 || v > 90) return toast('Informe uma meta entre 0 e 90%');
     save('config', {id:'metas', lucroMin:r2(v)}); render(); toast('Meta de lucro salva'); },
   delInsumo: async () => { const id = INS.id; const usado = Object.values(S.receitas).filter(r => (r.itens || []).some(i => i.insumoId === id)).map(r => r.nome);
     if (await askConfirm(usado.length ? `Esse insumo está em: ${usado.join(', ')}. Excluir mesmo assim? Essas receitas vão ficar com ingrediente faltando.` : 'Excluir este insumo?', 'Excluir')){ remove('insumos', id); closeDlg(); render(); toast('Insumo excluído'); } },
   novaReceita: () => openReceita(''),
   editReceita: b => openReceita(b.dataset.id),
-  addItem: () => { RF.itens.push({insumoId:'', qtd:'', unidade:'g'}); renderRf(); },
+  addItem: () => { RF.itens.push({ref:'', insumoId:'', qtd:'', unidade:'g'}); renderRf(); },
   rmItem: b => { RF.itens.splice(+b.dataset.i, 1); renderRf(); },
   salvarReceita: () => { if (!RF.nome.trim()) return toast('Dê um nome à receita'); if (!num(RF.rendimento)) return toast('Informe quanto a receita rende');
-    const itens = RF.itens.filter(i => i.insumoId && num(i.qtd) > 0).map(i => ({insumoId:i.insumoId, qtd:num(i.qtd), unidade:i.unidade}));
+    const itens = RF.itens.filter(i => (i.insumoId || i.receitaId) && num(i.qtd) > 0).map(i => i.receitaId ? {receitaId:i.receitaId, qtd:num(i.qtd), unidade:i.unidade === 'inteira' ? 'inteira' : 'por'} : {insumoId:i.insumoId, qtd:num(i.qtd), unidade:i.unidade});
     if (!itens.length) return toast('Adicione pelo menos um ingrediente');
+    if (RF.id && itens.some(i => i.receitaId && (i.receitaId === RF.id || contemReceita(S.receitas[i.receitaId] || {}, RF.id)))) return toast('Não dá: uma receita não pode estar dentro dela mesma');
     let cat = RF.categoria;
     if (cat === '__nova'){ const nome = (RF.novaCat || '').trim(); if (!nome) return toast('Dê um nome à nova categoria');
       cat = acharCat(nome) || nome; if (!acharCat(nome)) salvarListaCat([...categorias(), nome]); }
@@ -1463,7 +1544,8 @@ const ACT = {
     if (Object.values(mapa).includes('Outros') && !final.includes('Outros')) final.push('Outros');
     Object.values(S.receitas).forEach(r => { if (mapa[r.categoria]) save('receitas', {...r, categoria:mapa[r.categoria]}); });
     salvarListaCat(final); closeDlg(); render(); toast('Categorias salvas'); },
-  delReceita: async () => { if (await askConfirm('Excluir esta receita? Os lançamentos antigos continuam no relatório.', 'Excluir')){ remove('receitas', RF.id); closeDlg(); render(); toast('Receita excluída'); } },
+  delReceita: async () => { const pais = Object.values(S.receitas).filter(r => (r.itens || []).some(i => i.receitaId === RF.id)).map(r => r.nome);
+    if (await askConfirm(pais.length ? `Esta receita está dentro de: ${pais.join(', ')}. Excluir mesmo assim? Elas vão ficar com um ingrediente faltando.` : 'Excluir esta receita? Os lançamentos antigos continuam no relatório.', 'Excluir')){ remove('receitas', RF.id); closeDlg(); render(); toast('Receita excluída'); } },
   salvarNeg: () => { save('config', {...NEG, id:'negocio', nome:NEG.nome.trim(), telefone:fmtTel(NEG.telefone), cidade:NEG.cidade.trim(), pix:NEG.pix.trim(), obsPadrao:NEG.obsPadrao.trim()}); toast('Dados do negócio salvos'); render(); },
   exportar: () => exportar(),
   exemplo: async () => { if (totalItens() && !await askConfirm('Adicionar os dados de exemplo junto com os seus?', 'Adicionar')) return; exemplo(); },
@@ -1487,12 +1569,14 @@ function bind(t){
   const [f, ...parts] = path.split('.'); let o = FORMS[f](); if (!o) return;
   for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
   o[parts.at(-1)] = t.value;
-  if (f === 'rf' && parts[0] === 'itens' && parts[2] === 'insumoId'){ const ins = S.insumos[t.value]; if (ins) o.unidade = FAM_UNITS[UNITS[ins.unidade].f][0]; }
+  if (f === 'rf' && parts[0] === 'itens' && parts[2] === 'ref'){
+    if (t.value.startsWith('r:')){ o.receitaId = t.value.slice(2); delete o.insumoId; o.unidade = 'por'; }
+    else { delete o.receitaId; o.insumoId = t.value; const ins = S.insumos[t.value]; if (ins) o.unidade = FAM_UNITS[UNITS[ins.unidade].f][0]; } }
   if (f === 'orc'){ $('#orc-result').innerHTML = orcResult(); const mh = $('#orc-modo-hint'); if (mh) mh.innerHTML = orcModoHint(); if (parts[0] === 'margem') document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.v === t.value)); }
   if (f === 'lan'){
     if (parts[0] === 'recebido') LAN.manual = !!t.value;
     if (parts[0] === 'linhas'){ autoTotalLan(); const li = $('#lan-info-' + parts[1]); if (li) li.innerHTML = lanInfo(LAN.linhas[+parts[1]]); }
-    const th = $('#lan-total-hint'); if (th) th.innerHTML = lanTotalHint();
+    const th = $('#lan-total-hint'); if (th) th.innerHTML = lanTotalHint(); const ch = $('#lan-cartao-hint'); if (ch) ch.innerHTML = cartaoHint();
     $('#lan-result').innerHTML = lanResult(); const ph = $('#lan-pag-hint'); if (ph) ph.innerHTML = pagHint(); }
   if (f === 'ins') $('#ins-prev').innerHTML = insPrev();
   if (f === 'pr'){
@@ -1502,7 +1586,7 @@ function bind(t){
   }
   if (f === 'rt'){ const e = $('#rt-ex'); if (e) e.textContent = brl(Math.min(num(RT.pct) / 100, .6) * 100); }
   if (f === 'rf'){ RF.itens.forEach((it, i) => { const el = $('#rf-c-' + i); if (el) el.innerHTML = rfItemCusto(it); }); $('#rf-total').innerHTML = rfTotal(); const ph = $('#rf-preco-hint'); if (ph) ph.innerHTML = rfPrecoHint(); }
-  if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
+  if (f === 'q'){ const c = qCalc(); $('#q-tot').textContent = brl(c.total); const qc = $('#q-cartao'); if (qc) qc.innerHTML = qCartaoHTML(c.total); $('#q-priv').innerHTML = qPriv(c); Q.itens.forEach((it, i) => { const el = $('#q-lt-' + i); if (el) el.textContent = brl(num(it.qtd) * num(it.preco)); }); }
 }
 document.addEventListener('input', e => {
   const t = e.target;
